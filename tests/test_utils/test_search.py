@@ -53,7 +53,7 @@ class TestSearch:
         assert any(r["title"] == "API Reference" for r in results)
 
     def test_no_results(self, built_index):
-        results = built_index.search("xyznonexistent999")
+        results = built_index.search("qqqzzznomatch")
         assert results == []
 
     def test_result_keys(self, built_index):
@@ -73,3 +73,21 @@ class TestSearch:
     def test_no_index_returns_empty(self, index_dir):
         idx = SearchIndex(index_dir)
         assert idx.search("anything") == []
+
+    def test_partial_match(self, built_index):
+        # "configur" should match the doc containing "configuration"
+        results = built_index.search("configur")
+        assert len(results) > 0
+        assert any(r["path"] == "subdir/nested.md" for r in results)
+
+    def test_case_insensitive(self, built_index):
+        # lowercase "api" should match "API Reference"
+        results = built_index.search("api")
+        assert len(results) > 0
+        assert any(r["title"] == "API Reference" for r in results)
+
+    def test_substring_match(self, built_index):
+        # "param" should match the doc containing "parameter"
+        results = built_index.search("param")
+        assert len(results) > 0
+        assert any(r["title"] == "API Reference" for r in results)

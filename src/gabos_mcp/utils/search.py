@@ -46,7 +46,7 @@ class SearchIndex:
         con = sqlite3.connect(self._db_path)
         try:
             con.execute(f"DROP TABLE IF EXISTS {_TABLE}")
-            con.execute(f"CREATE VIRTUAL TABLE {_TABLE} USING fts5(path UNINDEXED, title, content)")
+            con.execute(f'CREATE VIRTUAL TABLE {_TABLE} USING fts5(path UNINDEXED, title, content, tokenize="trigram")')
             for path, title, content in documents:
                 try:
                     con.execute(
@@ -100,4 +100,5 @@ class SearchIndex:
             for path, title, score in rows
         ]
         results.sort(key=lambda r: r["score"], reverse=True)
+
         return results
