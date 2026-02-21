@@ -12,7 +12,7 @@ Add to `.zed/settings.json`:
 {
   "gabos-mcp": {
     "command": "uv",
-    "args": ["run", "--directory", "/path/to/gabos-mcp", "gabos-mcp"]
+    "args": ["run", "--directory", "/path/to/gabos-mcp-repo", "gabos-mcp"]
   }
 }
 ```

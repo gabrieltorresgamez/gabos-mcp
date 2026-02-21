@@ -87,7 +87,7 @@ class SearchIndex:
                 {
                     "title": hit["title"],
                     "path": hit["path"],
-                    "score": round(hit.score, 2),
+                    "score": int((hit.score or 0.0) * 100 + 0.5) / 100,
                 }
                 for hit in hits
             ]
