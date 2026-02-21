@@ -1,13 +1,6 @@
 # gabos-mcp
 
-A personal MCP server for accessing and searching CHM (Compiled Help Manual) files.
-
-## Features
-
-- Full-text search across help documentation
-- Retrieve page content in Markdown format
-- Browse apps, sources, and pages with pagination
-- Multi-app, multi-source support with automatic caching
+A personal MCP server.
 
 ## Connect
 
