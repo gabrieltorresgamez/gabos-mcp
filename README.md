@@ -12,8 +12,7 @@ Add to `.zed/settings.json`:
 {
   "gabos-mcp": {
     "command": "uv",
-    "args": ["run","--directory","/path/to/gabos-mcp","gabos-mcp"],
-    "env": {"GABOS_CHM_FILES":"{\"MyApp\": {\"Admin Manual\": \"/path/to/admin.chm\", \"End User Manual\": \"/path/to/user.chm\"}, \"another_app\": {\"Reference\": \"/path/to/reference.chm\"}}"}
+    "args": ["run", "--directory", "/path/to/gabos-mcp", "gabos-mcp"]
   }
 }
 ```
@@ -23,7 +22,9 @@ Add to `.zed/settings.json`:
 Interactive web UI with hot-reload:
 
 ```bash
-set -a && source .env && set +a && uv run fastmcp dev inspector src/gabos_mcp/server.py --with-editable .
+uv run fastmcp dev inspector src/gabos_mcp/server.py --with-editable .
 ```
 
 Open `http://localhost:8000`
+
+Configuration is loaded automatically from a `.env` file in the project root (see `.env.example`).

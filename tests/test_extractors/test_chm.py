@@ -188,7 +188,7 @@ class TestExtract:
             ext._extract(chm_path, html_dir)
             mock_run.assert_called_once()
             args = mock_run.call_args[0][0]
-            assert args[0] == "7z"
+            assert args[0].endswith("7z") or args[0].endswith("7z.exe")
             assert str(chm_path) in args
 
     def test_raises_when_7z_missing(self, tmp_path, tmp_cache):
@@ -199,7 +199,7 @@ class TestExtract:
         html_dir = Path(tmp_cache) / "myapp" / "docs" / "html"
 
         with (
-            patch("gabos_mcp.extractors.chm.subprocess.run", side_effect=FileNotFoundError),
+            patch("gabos_mcp.extractors.chm.shutil.which", return_value=None),
             pytest.raises(RuntimeError, match="7z is required"),
         ):
             ext._extract(chm_path, html_dir)

@@ -1,7 +1,9 @@
 """CHM file extraction, conversion, and full-text search."""
 
 import logging
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import html2text
@@ -19,7 +21,7 @@ class ChmExtractor:
     def __init__(
         self,
         apps: dict[str, dict[str, str]],
-        cache_dir: str = "~/.cache/gabos-mcp/chm",
+        cache_dir: str,
     ):
         """Initialize with app-grouped CHM file mappings.
 
@@ -61,23 +63,37 @@ class ChmExtractor:
         self._build_index(cache / "markdown", cache / "index")
         self._ready.add(key)
 
+    @staticmethod
+    def _find_7z() -> str:
+        """Find the 7z executable, checking common install locations on Windows."""
+        path = shutil.which("7z")
+        if path:
+            return path
+        if sys.platform == "win32":
+            for candidate in [
+                Path(r"C:\Program Files\7-Zip\7z.exe"),
+                Path(r"C:\Program Files (x86)\7-Zip\7z.exe"),
+            ]:
+                if candidate.is_file():
+                    return str(candidate)
+        raise RuntimeError(
+            "7z is required to extract CHM files. "
+            "Install it with: pacman -S p7zip (Arch) / apt install p7zip-full (Debian) / "
+            "brew install p7zip (macOS) / winget install 7zip (Windows)"
+        )
+
     def _extract(self, chm_path: Path, html_dir: Path) -> None:
         marker = html_dir / ".extracted"
         if marker.exists():
             return
         html_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            subprocess.run(
-                ["7z", "x", str(chm_path), f"-o{html_dir}", "-y"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except FileNotFoundError:
-            raise RuntimeError(
-                "7z is required to extract CHM files. "
-                "Install it with: sudo pacman -S p7zip (Arch) / sudo apt install p7zip-full (Debian)"
-            )
+        cmd = self._find_7z()
+        subprocess.run(
+            [cmd, "x", str(chm_path), f"-o{html_dir}", "-y"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         marker.touch()
 
     def _convert(self, html_dir: Path, md_dir: Path) -> None:
