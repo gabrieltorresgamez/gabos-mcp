@@ -13,14 +13,13 @@ dependencies = [
     "html2text>=2024.2.26",
     "platformdirs>=4.9.2",
     "python-dotenv>=1.2.1",
-    "ruff>=0.15.2",
-    "ty>=0.0.18",
-    "whoosh>=2.7.4",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.15.2",
+    "ty>=0.0.18",
 ]
 
 [project.scripts]

@@ -176,6 +176,63 @@ class TestValidation:
             extractor_with_html.read_page("testapp", "nonexistent", "page.md")
 
 
+class TestClearCache:
+    def test_clears_specific_source(self, extractor_with_html, tmp_cache):
+        extractor_with_html._ensure_ready("testapp", "manual")
+        cache = Path(tmp_cache) / "testapp" / "manual"
+        assert cache.exists()
+
+        cleared = extractor_with_html.clear_cache(app="testapp", source="manual")
+
+        assert not cache.exists()
+        assert len(cleared) == 1
+        assert "testapp" in cleared[0]
+
+    def test_clears_all_sources_for_app(self, extractor_with_html, tmp_cache):
+        extractor_with_html._ensure_ready("testapp", "manual")
+        cleared = extractor_with_html.clear_cache(app="testapp")
+        assert len(cleared) == 1
+
+    def test_clears_all(self, extractor_with_html, tmp_cache):
+        extractor_with_html._ensure_ready("testapp", "manual")
+        cleared = extractor_with_html.clear_cache()
+        assert len(cleared) == 1
+
+    def test_returns_empty_when_nothing_cached(self, tmp_path, tmp_cache):
+        chm_path = tmp_path / "test.chm"
+        chm_path.touch()
+        ext = ChmExtractor(apps={"testapp": {"manual": str(chm_path)}}, cache_dir=tmp_cache)
+        assert ext.clear_cache() == []
+
+    def test_removes_from_ready_set(self, extractor_with_html):
+        extractor_with_html._ensure_ready("testapp", "manual")
+        assert "testapp/manual" in extractor_with_html._ready
+
+        extractor_with_html.clear_cache(app="testapp", source="manual")
+        assert "testapp/manual" not in extractor_with_html._ready
+
+    def test_source_without_app_raises(self, extractor_with_html):
+        with pytest.raises(ValueError, match="Cannot specify source without app"):
+            extractor_with_html.clear_cache(source="manual")
+
+    def test_unknown_app_raises(self, extractor_with_html):
+        with pytest.raises(ValueError, match="Unknown app"):
+            extractor_with_html.clear_cache(app="nonexistent")
+
+    def test_rebuild_works_after_clear(self, extractor_with_html, tmp_cache, sample_html_dir):
+        extractor_with_html._ensure_ready("testapp", "manual")
+        extractor_with_html.clear_cache(app="testapp", source="manual")
+
+        # Re-create the html symlink so _extract marker is present again
+        chm_cache = Path(tmp_cache) / "testapp" / "manual" / "html"
+        chm_cache.parent.mkdir(parents=True, exist_ok=True)
+        chm_cache.symlink_to(sample_html_dir)
+
+        extractor_with_html._ensure_ready("testapp", "manual")
+        results = extractor_with_html.search("welcome", app="testapp")
+        assert len(results) > 0
+
+
 class TestExtract:
     def test_calls_7z(self, tmp_path, tmp_cache):
         chm_path = tmp_path / "test.chm"

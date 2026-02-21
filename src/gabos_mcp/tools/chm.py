@@ -68,3 +68,15 @@ def register(mcp: FastMCP) -> None:
         if not sources:
             return json.dumps({"message": f"No sources found for app '{app}'."})
         return json.dumps(sources, indent=2)
+
+    @mcp.tool
+    def clear_chm_cache(app: str | None = None, source: str | None = None) -> str:
+        """Clear the CHM cache so it will be rebuilt on next access.
+
+        Useful when a CHM file has been updated or a source has been removed.
+        Optionally scope to a specific app and/or source; omit both to clear all.
+        """
+        cleared = extractor.clear_cache(app=app, source=source)
+        if not cleared:
+            return json.dumps({"message": "Nothing to clear — no cached data found."})
+        return json.dumps({"cleared": cleared})

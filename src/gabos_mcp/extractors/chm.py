@@ -277,6 +277,43 @@ class ChmExtractor:
 
         return pages[offset : offset + limit]
 
+    def clear_cache(self, app: str | None = None, source: str | None = None) -> list[str]:
+        """Delete cached data so it will be rebuilt on next access.
+
+        Args:
+            app: Scope to a specific app, or None to clear all apps.
+            source: Scope to a specific source within an app. Requires app.
+
+        Returns:
+            List of cleared cache paths (as strings).
+
+        Raises:
+            ValueError: If source is given without app, or if app/source is unknown.
+        """
+        if source and not app:
+            raise ValueError("Cannot specify source without app.")
+
+        targets: list[tuple[str, str]] = []
+        if app and source:
+            self._validate_source(app, source)
+            targets = [(app, source)]
+        elif app:
+            self._validate_app(app)
+            targets = [(app, s) for s in self._apps[app]]
+        else:
+            for a, sources in self._apps.items():
+                targets.extend((a, s) for s in sources)
+
+        cleared: list[str] = []
+        for a, s in targets:
+            cache = self._cache_path(a, s)
+            if cache.exists():
+                shutil.rmtree(cache)
+                cleared.append(str(cache))
+            self._ready.discard(self._cache_key(a, s))
+
+        return cleared
+
     def list_apps(self) -> list[str]:
         """Return sorted list of configured app names."""
         return sorted(self._apps.keys())
