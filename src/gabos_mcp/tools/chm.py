@@ -21,7 +21,7 @@ def register(mcp: FastMCP) -> None:
     extractor = ChmExtractor(apps=apps, cache_dir=cache_dir)
 
     @mcp.tool
-    def search_chm(query: str, app: str | None = None, source: str | None = None, limit: int = 10) -> str:
+    def search_chm(query: str, app: str | None = None, source: str | None = None, limit: int = 30) -> str:
         """Search CHM help files for pages matching a query.
 
         Returns JSON array of results with app, source, title, path, and score.
