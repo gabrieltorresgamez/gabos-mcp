@@ -1,6 +1,7 @@
 """CHM file extraction, conversion, and full-text search."""
 
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -8,11 +9,37 @@ from pathlib import Path
 
 import html2text
 from bs4 import BeautifulSoup
-from whoosh.fields import ID, TEXT, Schema
-from whoosh.index import create_in, exists_in, open_dir
-from whoosh.qparser import MultifieldParser
+
+from gabos_mcp.utils.search import SearchIndex
 
 logger = logging.getLogger(__name__)
+
+_EMPTY_LINK_RE = re.compile(r"^\s*(\[]\([^)]*\)\s*)+$")
+
+
+def _clean_markdown(text: str) -> str:
+    """Remove CHM navigation artifacts from converted markdown.
+
+    Strips:
+    - Navigation breadcrumb lines (starting with **Navigation:**)
+    - Lines consisting only of empty markdown links [](url) from image-only nav buttons
+    """
+    lines = text.splitlines()
+    cleaned = [
+        line for line in lines if not line.lstrip().startswith("**Navigation:**") and not _EMPTY_LINK_RE.match(line)
+    ]
+    # Collapse runs of 3+ blank lines down to 2
+    result: list[str] = []
+    blank_count = 0
+    for line in cleaned:
+        if line.strip() == "":
+            blank_count += 1
+            if blank_count <= 2:
+                result.append(line)
+        else:
+            blank_count = 0
+            result.append(line)
+    return "\n".join(result)
 
 
 class ChmExtractor:
@@ -119,6 +146,7 @@ class ChmExtractor:
 
                 cleaned_html = str(soup)
                 markdown = converter.handle(cleaned_html)
+                markdown = _clean_markdown(markdown)
 
                 rel_path = html_file.relative_to(html_dir).with_suffix(".md")
                 out_path = md_dir / rel_path
@@ -130,38 +158,25 @@ class ChmExtractor:
         marker.touch()
 
     def _build_index(self, md_dir: Path, index_dir: Path) -> None:
-        marker = index_dir / ".indexed"
-        if marker.exists():
-            return
-        index_dir.mkdir(parents=True, exist_ok=True)
+        def documents():
+            for md_file in md_dir.rglob("*.md"):
+                try:
+                    text = md_file.read_text(encoding="utf-8")
+                    rel_path = str(md_file.relative_to(md_dir))
 
-        schema = Schema(
-            path=ID(stored=True, unique=True),
-            title=TEXT(stored=True),
-            content=TEXT,
-        )
-        ix = create_in(str(index_dir), schema)
-        writer = ix.writer()
+                    # Extract title from first non-empty line
+                    title = rel_path
+                    for line in text.splitlines():
+                        line = line.strip()
+                        if line:
+                            title = line.lstrip("#").strip()
+                            break
 
-        for md_file in md_dir.rglob("*.md"):
-            try:
-                text = md_file.read_text(encoding="utf-8")
-                rel_path = str(md_file.relative_to(md_dir))
+                    yield rel_path, title, text
+                except Exception:
+                    logger.warning("Failed to read %s for indexing, skipping", md_file, exc_info=True)
 
-                # Extract title from first non-empty line
-                title = rel_path
-                for line in text.splitlines():
-                    line = line.strip()
-                    if line:
-                        title = line.lstrip("#").strip()
-                        break
-
-                writer.add_document(path=rel_path, title=title, content=text)
-            except Exception:
-                logger.warning("Failed to index %s, skipping", md_file, exc_info=True)
-
-        writer.commit()
-        marker.touch()
+        SearchIndex(index_dir).build(documents())
 
     def search(self, query: str, app: str | None = None, source: str | None = None, limit: int = 10) -> list[dict]:
         """Search across CHM sources, optionally scoped by app and/or source.
@@ -193,29 +208,8 @@ class ChmExtractor:
         for a, s in targets:
             self._ensure_ready(a, s)
             index_dir = self._cache_path(a, s) / "index"
-            if not exists_in(str(index_dir)):
-                continue
-
-            ix = open_dir(str(index_dir))
-            with ix.searcher() as searcher:
-                parser = MultifieldParser(["title", "content"], ix.schema)
-                try:
-                    parsed = parser.parse(query)
-                except Exception:
-                    logger.warning("Failed to parse query: %s", query)
-                    return []
-
-                hits = searcher.search(parsed, limit=limit)
-                for hit in hits:
-                    results.append(
-                        {
-                            "app": a,
-                            "source": s,
-                            "title": hit["title"],
-                            "path": hit["path"],
-                            "score": round(hit.score, 2),
-                        }
-                    )
+            for hit in SearchIndex(index_dir).search(query, limit=limit):
+                results.append({"app": a, "source": s, **hit})
 
         results.sort(key=lambda r: r["score"], reverse=True)
         return results[:limit]

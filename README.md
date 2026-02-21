@@ -27,4 +27,4 @@ uv run fastmcp dev inspector src/gabos_mcp/server.py --with-editable .
 
 Open `http://localhost:8000`
 
-Configuration is loaded automatically from a `.env` file in the project root (see `.env.example`).
+Configuration is loaded automatically from a `.env` file in the project root (see `.env-example`).

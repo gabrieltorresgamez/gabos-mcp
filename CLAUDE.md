@@ -31,7 +31,7 @@ uv run ruff format .
 uv run ty check .
 
 # Dev inspector (interactive tool testing in browser)
-uv run fastmcp dev inspector src/gabos_mcp/server.py
+uv run fastmcp dev inspector src/gabos_mcp/server.py --with-editable .
 ```
 
 ## Architecture
@@ -44,11 +44,12 @@ src/gabos_mcp/
 ├── main.py            # Entrypoint — imports server, calls mcp.run()
 ├── tools/             # @mcp.tool functions, grouped by domain
 ├── extractors/        # Plain Python classes for non-trivial data fetching/parsing
+├── utils/             # Shared utilities (no MCP dependency) reused across extractors
 ├── resources/         # @mcp.resource functions (read-only data via URIs) — added as needed
 └── prompts/           # @mcp.prompt templates — added as needed
 ```
 
-**Key design principle:** Tools, resources, and prompts are thin glue — they validate input, call an extractor, and return results. The heavy logic lives in `extractors/`, which has no MCP dependency and is independently testable.
+**Key design principle:** Tools, resources, and prompts are thin glue — they validate input, call an extractor, and return results. The heavy logic lives in `extractors/`, which has no MCP dependency and is independently testable. Shared logic that multiple extractors need lives in `utils/`.
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
 
@@ -60,3 +61,4 @@ src/gabos_mcp/
    1. `uv run ruff check .` — fix any lint errors
    2. `uv run ty check .` — fix any type errors
    3. `uv run ruff format .` — apply formatting
+4. Update `CLAUDE.md` and `README.md` if the change affects architecture, commands, or configuration

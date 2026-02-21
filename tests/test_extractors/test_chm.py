@@ -184,7 +184,10 @@ class TestExtract:
         ext = ChmExtractor(apps={"myapp": {"docs": str(chm_path)}}, cache_dir=tmp_cache)
         html_dir = Path(tmp_cache) / "myapp" / "docs" / "html"
 
-        with patch("gabos_mcp.extractors.chm.subprocess.run") as mock_run:
+        with (
+            patch("gabos_mcp.extractors.chm.shutil.which", return_value="/usr/bin/7z"),
+            patch("gabos_mcp.extractors.chm.subprocess.run") as mock_run,
+        ):
             ext._extract(chm_path, html_dir)
             mock_run.assert_called_once()
             args = mock_run.call_args[0][0]
