@@ -1,13 +1,12 @@
-from fastmcp import FastMCP
+"""Entrypoint for the gabos-mcp server."""
 
-mcp = FastMCP("gabos-mcp")
+from gabos_mcp.server import mcp
 
 
-@mcp.tool
-def add(a: int, b: int) -> int:
-    """Add two numbers"""
-    return a + b
+def main():
+    """Run the MCP server."""
+    mcp.run()
 
 
 if __name__ == "__main__":
-    mcp.run()
+    main()

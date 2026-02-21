@@ -22,10 +22,16 @@ uv run pytest tests/test_tools/test_example.py
 uv run pytest tests/test_tools/test_example.py::test_name
 
 # Lint
-uv run ruff check src/
+uv run ruff check .
+
+# Format
+uv run ruff format .
 
 # Type check
-uv run ty check src/
+uv run ty check .
+
+# Dev inspector (interactive tool testing in browser)
+uv run fastmcp dev inspector src/gabos_mcp/server.py
 ```
 
 ## Architecture
@@ -34,14 +40,23 @@ Uses `src` layout with FastMCP 3.x. The four MCP primitives are **tools**, **res
 
 ```
 src/gabos_mcp/
-├── server.py          # FastMCP instance + wiring (imports all component modules)
+├── server.py          # FastMCP instance + wiring (imports and registers all components)
 ├── main.py            # Entrypoint — imports server, calls mcp.run()
 ├── tools/             # @mcp.tool functions, grouped by domain
-├── resources/         # @mcp.resource functions (read-only data via URIs)
-├── prompts/           # @mcp.prompt templates
-└── extractors/        # Plain Python classes for non-trivial data fetching/parsing
+├── extractors/        # Plain Python classes for non-trivial data fetching/parsing
+├── resources/         # @mcp.resource functions (read-only data via URIs) — added as needed
+└── prompts/           # @mcp.prompt templates — added as needed
 ```
 
 **Key design principle:** Tools, resources, and prompts are thin glue — they validate input, call an extractor, and return results. The heavy logic lives in `extractors/`, which has no MCP dependency and is independently testable.
 
-`server.py` creates the `FastMCP("gabos-mcp")` instance and is where all component modules get imported/registered. `main.py` stays minimal.
+**Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
+
+## After Every Code Change
+
+1. Update/add tests if necessary
+2. Run tests: `uv run pytest`
+3. Repeat until clean:
+   1. `uv run ruff check .` — fix any lint errors
+   2. `uv run ty check .` — fix any type errors
+   3. `uv run ruff format .` — apply formatting
