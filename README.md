@@ -4,6 +4,21 @@ A personal MCP server.
 
 ## Connect
 
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "gabos-mcp": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/gabos-mcp-repo", "gabos-mcp"]
+    }
+  }
+}
+```
+
 ### IDE (Zed)
 
 Add to `.zed/settings.json`:
