@@ -12,6 +12,7 @@ services:
       # GITHUB_CLIENT_ID: Ov23li...
       # GITHUB_CLIENT_SECRET: your-github-client-secret
       # MCP_BASE_URL: https://your-server.com
+      # GITHUB_ALLOWED_USERS: user1,user2
     volumes:
       - /path/to/chm/files:/data
     restart: unless-stopped
