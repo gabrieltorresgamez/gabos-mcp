@@ -8,6 +8,7 @@ services:
       MCP_HOST: 0.0.0.0
       MCP_PORT: 8000
       GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/path/to/admin.chm", "End User Manual": "/path/to/user.chm"}, "another_app": {"Reference": "/path/to/reference.chm"}}'
+      MCP_AUTH_TOKENS: '["your-secret-token"]'
       # GABOS_CHM_CACHE_DIR: /cache
     volumes:
       - /path/to/chm/files:/data
