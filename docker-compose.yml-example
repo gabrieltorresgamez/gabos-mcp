@@ -1,0 +1,14 @@
+services:
+  gabos-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+      GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/path/to/admin.chm", "End User Manual": "/path/to/user.chm"}, "another_app": {"Reference": "/path/to/reference.chm"}}'
+      # GABOS_CHM_CACHE_DIR: /cache
+    volumes:
+      - /path/to/chm/files:/data
+    restart: unless-stopped

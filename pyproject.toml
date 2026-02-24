@@ -12,7 +12,6 @@ dependencies = [
     "fastmcp>=3.0.2",
     "html2text>=2024.2.26",
     "platformdirs>=4.9.2",
-    "python-dotenv>=1.2.1",
 ]
 
 [dependency-groups]

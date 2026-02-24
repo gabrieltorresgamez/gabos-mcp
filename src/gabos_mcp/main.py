@@ -2,19 +2,11 @@
 
 import os
 
-from dotenv import find_dotenv, load_dotenv
+from gabos_mcp.server import mcp
 
 
 def main():
-    """Load environment and run the MCP server."""
-    env_file = find_dotenv(usecwd=True)
-    if not env_file:
-        raise FileNotFoundError("Missing .env file — copy .env-example and fill in your values.")
-    load_dotenv(env_file)
-
-    # Import after env is loaded so modules can read env vars at import time
-    from gabos_mcp.server import mcp
-
+    """Run the MCP server."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
 
     if transport == "stdio":

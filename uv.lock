@@ -318,7 +318,6 @@ dependencies = [
     { name = "fastmcp" },
     { name = "html2text" },
     { name = "platformdirs" },
-    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -334,7 +333,6 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=3.0.2" },
     { name = "html2text", specifier = ">=2024.2.26" },
     { name = "platformdirs", specifier = ">=4.9.2" },
-    { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
 
 [package.metadata.requires-dev]

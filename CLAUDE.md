@@ -41,7 +41,7 @@ Uses `src` layout with FastMCP 3.x. The four MCP primitives are **tools**, **res
 ```
 src/gabos_mcp/
 ├── server.py          # FastMCP instance + wiring (imports and registers all components)
-├── main.py            # Entrypoint — imports server, calls mcp.run()
+├── main.py            # Entrypoint — selects transport via env vars, runs server
 ├── tools/             # @mcp.tool functions, grouped by domain
 ├── extractors/        # Plain Python classes for non-trivial data fetching/parsing
 ├── utils/             # Shared utilities (no MCP dependency) reused across extractors
