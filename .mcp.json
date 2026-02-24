@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "gabos-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "gabos-mcp"
+      ]
+    }
+  }
+}
