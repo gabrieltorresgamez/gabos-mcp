@@ -17,6 +17,11 @@ Configure via `docker-compose.yml` (copy from `docker-compose.yml-example`). Env
 | `MCP_PORT`            | `8000`            | Listen port (HTTP only)                           |
 | `GABOS_CHM_FILES`     | `{}`              | JSON mapping of apps to CHM file paths            |
 | `GABOS_CHM_CACHE_DIR` | _(auto)_          | Override cache directory                          |
+| `GITHUB_CLIENT_ID`    | _(none)_          | GitHub OAuth app client ID (enables OAuth)        |
+| `GITHUB_CLIENT_SECRET` | _(none)_         | GitHub OAuth app client secret                    |
+| `MCP_BASE_URL`        | _(none)_          | Public URL of the server (e.g. `https://my.host`) |
+
+When all three `GITHUB_*`/`MCP_BASE_URL` variables are set, the server requires GitHub OAuth 2.1 authentication. When any are missing, the server runs without auth (suitable for local stdio usage).
 
 ## Connect
 
@@ -48,27 +53,17 @@ Add to `.zed/settings.json`:
 }
 ```
 
-### Claude Desktop — Remote (HTTP)
+### Claude Desktop — Remote (OAuth)
 
-Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL.
+Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL (e.g. `https://mcp.fuet.ch/mcp`). Claude Desktop handles the OAuth flow automatically — it registers itself via Dynamic Client Registration, opens a browser window for GitHub login, and manages token refresh.
 
-### IDE (Zed) — Remote (HTTP)
-
-Add to `.zed/settings.json`:
-
-```json
-{
-  "gabos-mcp": {
-    "url": "http://your-server:8000/mcp"
-  }
-}
-```
-
-### Claude Code — Remote (HTTP)
+### Claude Code — Remote (OAuth)
 
 ```bash
-claude mcp add --transport http gabos-mcp http://your-server:8000/mcp
+claude mcp add --transport http gabos-mcp https://mcp.fuet.ch/mcp
 ```
+
+On first use, Claude Code opens your browser to complete the GitHub OAuth flow. Tokens are stored locally and refreshed automatically.
 
 ## Development
 
