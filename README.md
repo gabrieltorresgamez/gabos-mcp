@@ -17,13 +17,6 @@ Configure via `docker-compose.yml` (copy from `docker-compose.yml-example`). Env
 | `MCP_PORT`            | `8000`            | Listen port (HTTP only)                           |
 | `GABOS_CHM_FILES`     | `{}`              | JSON mapping of apps to CHM file paths            |
 | `GABOS_CHM_CACHE_DIR` | _(auto)_          | Override cache directory                          |
-| `MCP_AUTH_TOKENS`     | _(none)_          | JSON list of allowed bearer tokens (HTTP only)    |
-
-Generate a token with:
-
-```bash
-openssl rand -hex 64
-```
 
 ## Connect
 
@@ -57,7 +50,7 @@ Add to `.zed/settings.json`:
 
 ### Claude Desktop — Remote (HTTP)
 
-Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL. Note: Claude Desktop uses OAuth for remote auth, not bearer tokens.
+Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL.
 
 ### IDE (Zed) — Remote (HTTP)
 
@@ -66,10 +59,7 @@ Add to `.zed/settings.json`:
 ```json
 {
   "gabos-mcp": {
-    "url": "http://your-server:8000/mcp",
-    "headers": {
-      "Authorization": "Bearer <TOKEN>"
-    }
+    "url": "http://your-server:8000/mcp"
   }
 }
 ```
@@ -77,8 +67,7 @@ Add to `.zed/settings.json`:
 ### Claude Code — Remote (HTTP)
 
 ```bash
-claude mcp add --transport http gabos-mcp http://your-server:8000/mcp \
-  --header "Authorization: Bearer <TOKEN>"
+claude mcp add --transport http gabos-mcp http://your-server:8000/mcp
 ```
 
 ## Development
