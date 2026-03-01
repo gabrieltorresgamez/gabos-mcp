@@ -32,6 +32,9 @@ build-backend = "uv_build"
 target-version = "py314"
 line-length = 120
 
+[tool.ruff.format]
+indent-style = "tab"
+
 [tool.ruff.lint]
 extend-select = [
     "W",   # pycodestyle warnings
@@ -46,6 +49,7 @@ extend-select = [
     "PTH", # pathlib over os.path
     "D",   # pydocstyle
 ]
+ignore = ["W191", "D206"] # tab indentation
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]  # no docstring requirements for tests
