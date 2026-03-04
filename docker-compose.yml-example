@@ -9,10 +9,12 @@ services:
       # MCP_PORT: 8000
       GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/path/to/admin.chm", "End User Manual": "/path/to/user.chm"}, "another_app": {"Reference": "/path/to/reference.chm"}}'
       # GABOS_CHM_CACHE_DIR: /cache
+      GABOS_KNOWLEDGE_DB: /data/knowledge.db
       # GITHUB_CLIENT_ID: Ov23li...
       # GITHUB_CLIENT_SECRET: your-github-client-secret
       # MCP_BASE_URL: https://your-server.com
       # GITHUB_ALLOWED_USERS: user1,user2
     volumes:
-      - /path/to/chm/files:/data
+      - /path/to/chm/files:/data/chm
+      - /path/to/data:/data
     restart: unless-stopped
