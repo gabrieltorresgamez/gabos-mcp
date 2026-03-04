@@ -39,7 +39,7 @@ def _clean_markdown(text: str) -> str:
 		else:
 			blank_count = 0
 			result.append(line)
-	return "\n".join(result)
+	return "\n".join(result).strip()
 
 
 class ChmExtractor:
@@ -242,7 +242,7 @@ class ChmExtractor:
 		if not resolved.is_file():
 			raise FileNotFoundError(f"Page not found: {path}")
 
-		return resolved.read_text(encoding="utf-8")
+		return resolved.read_text(encoding="utf-8").strip()
 
 	def list_pages(self, app: str, source: str, limit: int = 50, offset: int = 0) -> list[dict]:
 		"""List pages for a CHM source with pagination.
