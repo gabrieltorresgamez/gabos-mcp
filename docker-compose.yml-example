@@ -7,7 +7,7 @@ services:
       # MCP_TRANSPORT: streamable-http
       # MCP_HOST: 0.0.0.0
       # MCP_PORT: 8000
-      GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/path/to/admin.chm", "End User Manual": "/path/to/user.chm"}, "another_app": {"Reference": "/path/to/reference.chm"}}'
+      GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/data/chm/admin.chm", "End User Manual": "/data/chm/user.chm"}, "another_app": {"Reference": "/data/chm/reference.chm"}}'
       # GABOS_CHM_CACHE_DIR: /cache
       GABOS_KNOWLEDGE_DB: /data/knowledge.db
       # GITHUB_CLIENT_ID: Ov23li...
