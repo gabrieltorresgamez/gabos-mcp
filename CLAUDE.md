@@ -53,6 +53,8 @@ src/gabos_mcp/
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
 
+**Tool naming convention:** Use `module_verb` or `module_verb_noun` so tools group alphabetically by module. Examples: `docs_search`, `docs_read_page`, `knowledge_add`, `knowledge_list`. Never use `verb_module` or `verb_module_noun`.
+
 ## After Every Code Change
 
 1. Update/add tests if necessary

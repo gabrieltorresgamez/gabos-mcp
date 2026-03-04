@@ -1,4 +1,4 @@
-"""MCP tools for searching and reading CHM help files."""
+"""MCP tools for searching and reading documentation from CHM help files."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ if TYPE_CHECKING:
 
 
 def register(mcp: FastMCP) -> None:
-	"""Register CHM tools on the given FastMCP instance."""
+	"""Register docs tools on the given FastMCP instance."""
 	apps = json.loads(os.environ.get("GABOS_CHM_FILES", "{}"))
 	cache_dir = os.environ.get("GABOS_CHM_CACHE_DIR", str(user_cache_path("gabos-mcp") / "chm"))
 	extractor = ChmExtractor(apps=apps, cache_dir=cache_dir)
 
 	@mcp.tool
-	def search_chm(query: str, app: str | None = None, source: str | None = None, limit: int = 30) -> str:
-		"""Search CHM help files for pages matching a query.
+	def docs_search(query: str, app: str | None = None, source: str | None = None, limit: int = 30) -> str:
+		"""Search documentation pages matching a query.
 
 		Returns JSON array of results with app, source, title, path, and score.
-		Use app, source, and path with read_chm_page to read the full content.
+		Use app, source, and path with docs_read_page to read the full content.
 		Optionally scope to a specific app and/or source.
 		"""
 		results = extractor.search(query, app=app, source=source, limit=limit)
@@ -34,19 +34,19 @@ def register(mcp: FastMCP) -> None:
 		return json.dumps(results, indent=2)
 
 	@mcp.tool
-	def read_chm_page(app: str, source: str, path: str) -> str:
-		"""Read the full Markdown content of a CHM page.
+	def docs_read_page(app: str, source: str, path: str) -> str:
+		"""Read the full Markdown content of a documentation page.
 
-		Use app, source, and path values returned by search_chm.
+		Use app, source, and path values returned by docs_search or docs_list_pages.
 		"""
 		return extractor.read_page(app, source, path)
 
 	@mcp.tool
-	def list_chm_pages(app: str, source: str, limit: int = 50, offset: int = 0) -> str:
-		"""List available pages in a CHM source with pagination.
+	def docs_list_pages(app: str, source: str, limit: int = 50, offset: int = 0) -> str:
+		"""List available pages in a documentation source with pagination.
 
 		Returns JSON array of pages with title and path.
-		Use app, source, and path with read_chm_page to read the full content.
+		Use app, source, and path with docs_read_page to read the full content.
 		"""
 		pages = extractor.list_pages(app, source, limit=limit, offset=offset)
 		if not pages:
@@ -54,24 +54,24 @@ def register(mcp: FastMCP) -> None:
 		return json.dumps(pages, indent=2)
 
 	@mcp.tool
-	def list_chm_apps() -> str:
-		"""List all configured applications that have CHM help files."""
+	def docs_list_apps() -> str:
+		"""List all configured documentation applications."""
 		apps = extractor.list_apps()
 		if not apps:
 			return json.dumps({"message": "No apps configured. Set the GABOS_CHM_FILES environment variable."})
 		return json.dumps(apps, indent=2)
 
 	@mcp.tool
-	def list_chm_sources(app: str) -> str:
-		"""List available CHM sources for a specific application."""
+	def docs_list_sources(app: str) -> str:
+		"""List available documentation sources for a specific application."""
 		sources = extractor.list_sources(app)
 		if not sources:
 			return json.dumps({"message": f"No sources found for app '{app}'."})
 		return json.dumps(sources, indent=2)
 
 	@mcp.tool
-	def clear_chm_cache(app: str | None = None, source: str | None = None) -> str:
-		"""Clear the CHM cache so it will be rebuilt on next access.
+	def docs_clear_cache(app: str | None = None, source: str | None = None) -> str:
+		"""Clear the documentation cache so it will be rebuilt on next access.
 
 		Useful when a CHM file has been updated or a source has been removed.
 		Optionally scope to a specific app and/or source; omit both to clear all.
