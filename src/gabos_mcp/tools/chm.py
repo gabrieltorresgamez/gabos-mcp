@@ -21,34 +21,34 @@ def register(mcp: FastMCP) -> None:
 	extractor = ChmExtractor(apps=apps, cache_dir=cache_dir)
 
 	@mcp.tool
-	def docs_search(query: str, app: str | None = None, source: str | None = None, limit: int = 30) -> str:
+	async def docs_search(query: str, app: str | None = None, source: str | None = None, limit: int = 30) -> str:
 		"""Search documentation pages matching a query.
 
 		Returns JSON array of results with app, source, title, path, and score.
 		Use app, source, and path with docs_read_page to read the full content.
 		Optionally scope to a specific app and/or source.
 		"""
-		results = extractor.search(query, app=app, source=source, limit=limit)
+		results = await extractor.search(query, app=app, source=source, limit=limit)
 		if not results:
 			return json.dumps({"message": "No results found."})
 		return json.dumps(results, indent=2)
 
 	@mcp.tool
-	def docs_read_page(app: str, source: str, path: str) -> str:
+	async def docs_read_page(app: str, source: str, path: str) -> str:
 		"""Read the full Markdown content of a documentation page.
 
 		Use app, source, and path values returned by docs_search or docs_list_pages.
 		"""
-		return extractor.read_page(app, source, path)
+		return await extractor.read_page(app, source, path)
 
 	@mcp.tool
-	def docs_list_pages(app: str, source: str, limit: int = 50, offset: int = 0) -> str:
+	async def docs_list_pages(app: str, source: str, limit: int = 50, offset: int = 0) -> str:
 		"""List available pages in a documentation source with pagination.
 
 		Returns JSON array of pages with title and path.
 		Use app, source, and path with docs_read_page to read the full content.
 		"""
-		pages = extractor.list_pages(app, source, limit=limit, offset=offset)
+		pages = await extractor.list_pages(app, source, limit=limit, offset=offset)
 		if not pages:
 			return json.dumps({"message": "No pages found."})
 		return json.dumps(pages, indent=2)

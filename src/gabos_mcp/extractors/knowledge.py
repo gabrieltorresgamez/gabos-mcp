@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+import aiosqlite
 
 
 def _now() -> str:
@@ -24,34 +25,37 @@ class KnowledgeStore:
 		"""Initialize with the path to the SQLite database file (created if absent)."""
 		self._db_path = Path(db_path).expanduser()
 		self._db_path.parent.mkdir(parents=True, exist_ok=True)
-		self._migrate()
+		self._conn: aiosqlite.Connection | None = None
 
-	def _connect(self) -> sqlite3.Connection:
-		conn = sqlite3.connect(str(self._db_path))
-		conn.row_factory = sqlite3.Row
-		return conn
+	async def _connect(self) -> aiosqlite.Connection:
+		if self._conn is None:
+			self._conn = await aiosqlite.connect(str(self._db_path))
+			self._conn.row_factory = aiosqlite.Row
+		return self._conn
 
-	def _migrate(self) -> None:
-		with self._connect() as conn:
-			conn.execute("""
-				CREATE TABLE IF NOT EXISTS knowledge (
-					id         TEXT PRIMARY KEY,
-					owner      TEXT NOT NULL,
-					title      TEXT NOT NULL,
-					content    TEXT NOT NULL,
-					tags       TEXT NOT NULL DEFAULT '[]',
-					created_at TEXT NOT NULL,
-					updated_at TEXT NOT NULL
-				)
-			""")
+	async def migrate(self) -> None:
+		"""Create the necessary database tables if they do not exist."""
+		conn = await self._connect()
+		await conn.execute("""
+			CREATE TABLE IF NOT EXISTS knowledge (
+				id         TEXT PRIMARY KEY,
+				owner      TEXT NOT NULL,
+				title      TEXT NOT NULL,
+				content    TEXT NOT NULL,
+				tags       TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)
+		""")
+		await conn.commit()
 
 	@staticmethod
-	def _row_to_dict(row: sqlite3.Row) -> dict:
+	def _row_to_dict(row: aiosqlite.Row) -> dict:
 		d = dict(row)
 		d["tags"] = json.loads(str(d["tags"]))
 		return d
 
-	def add(self, owner: str, title: str, content: str, tags: list[str] | None = None) -> dict:
+	async def add(self, owner: str, title: str, content: str, tags: list[str] | None = None) -> dict:
 		"""Create a new knowledge entry.
 
 		Args:
@@ -66,12 +70,13 @@ class KnowledgeStore:
 		now = _now()
 		entry_id = str(uuid.uuid4())
 		tags_list = tags or []
-		with self._connect() as conn:
-			conn.execute(
-				"INSERT INTO knowledge (id, owner, title, content, tags, created_at, updated_at) "
-				"VALUES (?, ?, ?, ?, ?, ?, ?)",
-				(entry_id, owner, title, content, json.dumps(tags_list), now, now),
-			)
+		conn = await self._connect()
+		await conn.execute(
+			"INSERT INTO knowledge (id, owner, title, content, tags, created_at, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?)",
+			(entry_id, owner, title, content, json.dumps(tags_list), now, now),
+		)
+		await conn.commit()
 		return {
 			"id": entry_id,
 			"owner": owner,
@@ -82,13 +87,14 @@ class KnowledgeStore:
 			"updated_at": now,
 		}
 
-	def get(self, id: str) -> dict | None:
+	async def get(self, id: str) -> dict | None:
 		"""Return a single entry by ID, or None if not found."""
-		with self._connect() as conn:
-			row = conn.execute("SELECT * FROM knowledge WHERE id = ?", (id,)).fetchone()
+		conn = await self._connect()
+		cursor = await conn.execute("SELECT * FROM knowledge WHERE id = ?", (id,))
+		row = await cursor.fetchone()
 		return self._row_to_dict(row) if row else None
 
-	def list_entries(
+	async def list_entries(
 		self,
 		owner: str | None = None,
 		tag: str | None = None,
@@ -106,21 +112,30 @@ class KnowledgeStore:
 		Returns:
 		    List of entry dicts ordered by updated_at descending.
 		"""
-		with self._connect() as conn:
-			if owner:
-				rows = conn.execute(
-					"SELECT * FROM knowledge WHERE owner = ? ORDER BY updated_at DESC",
-					(owner,),
-				).fetchall()
-			else:
-				rows = conn.execute("SELECT * FROM knowledge ORDER BY updated_at DESC").fetchall()
+		conn = await self._connect()
+		query = "SELECT DISTINCT knowledge.* FROM knowledge"
+		params: list[str | int] = []
 
-		results = [self._row_to_dict(r) for r in rows]
 		if tag:
-			results = [r for r in results if tag in r["tags"]]
-		return results[offset : offset + limit]
+			query += ", json_each(knowledge.tags) WHERE json_each.value = ?"
+			params.append(tag)
+			if owner:
+				query += " AND owner = ?"
+				params.append(owner)
+		else:
+			if owner:
+				query += " WHERE owner = ?"
+				params.append(owner)
 
-	def update(
+		query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+		params.extend([limit, offset])
+
+		cursor = await conn.execute(query, tuple(params))
+		rows = await cursor.fetchall()
+
+		return [self._row_to_dict(r) for r in rows]
+
+	async def update(
 		self,
 		id: str,
 		owner: str,
@@ -144,7 +159,7 @@ class KnowledgeStore:
 		    KeyError: If the entry does not exist.
 		    PermissionError: If the caller is not the owner.
 		"""
-		entry = self.get(id)
+		entry = await self.get(id)
 		if entry is None:
 			raise KeyError(f"Knowledge entry '{id}' not found.")
 		if entry["owner"] != owner:
@@ -155,15 +170,16 @@ class KnowledgeStore:
 		new_tags = tags if tags is not None else entry["tags"]
 		now = _now()
 
-		with self._connect() as conn:
-			conn.execute(
-				"UPDATE knowledge SET title = ?, content = ?, tags = ?, updated_at = ? WHERE id = ?",
-				(new_title, new_content, json.dumps(new_tags), now, id),
-			)
+		conn = await self._connect()
+		await conn.execute(
+			"UPDATE knowledge SET title = ?, content = ?, tags = ?, updated_at = ? WHERE id = ?",
+			(new_title, new_content, json.dumps(new_tags), now, id),
+		)
+		await conn.commit()
 
 		return {**entry, "title": new_title, "content": new_content, "tags": new_tags, "updated_at": now}
 
-	def delete(self, id: str, owner: str) -> None:
+	async def delete(self, id: str, owner: str) -> None:
 		"""Delete an entry. Only the owner may delete.
 
 		Args:
@@ -174,11 +190,12 @@ class KnowledgeStore:
 		    KeyError: If the entry does not exist.
 		    PermissionError: If the caller is not the owner.
 		"""
-		entry = self.get(id)
+		entry = await self.get(id)
 		if entry is None:
 			raise KeyError(f"Knowledge entry '{id}' not found.")
 		if entry["owner"] != owner:
 			raise PermissionError("You can only delete your own knowledge entries.")
 
-		with self._connect() as conn:
-			conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
+		conn = await self._connect()
+		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
+		await conn.commit()

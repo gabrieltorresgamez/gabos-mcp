@@ -1,12 +1,13 @@
 """CHM file extraction, conversion, and full-text search."""
 
+import asyncio
 import logging
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
+import aiofiles
 import html2text
 from bs4 import BeautifulSoup
 
@@ -61,6 +62,8 @@ class ChmExtractor:
 		}
 		self._cache_dir = Path(cache_dir).expanduser()
 		self._ready: set[str] = set()
+		self._locks: dict[str, asyncio.Lock] = {}
+		self._global_lock = asyncio.Lock()
 
 	def _cache_key(self, app: str, source: str) -> str:
 		return f"{app}/{source}"
@@ -79,16 +82,26 @@ class ChmExtractor:
 			available = ", ".join(sorted(self._apps[app])) or "(none)"
 			raise ValueError(f"Unknown source '{source}' in app '{app}'. Available: {available}")
 
-	def _ensure_ready(self, app: str, source: str) -> None:
+	async def _ensure_ready(self, app: str, source: str) -> None:
 		key = self._cache_key(app, source)
 		if key in self._ready:
 			return
-		self._validate_source(app, source)
-		cache = self._cache_path(app, source)
-		self._extract(self._apps[app][source], cache / "html")
-		self._convert(cache / "html", cache / "markdown")
-		self._build_index(cache / "markdown", cache / "index")
-		self._ready.add(key)
+
+		async with self._global_lock:
+			if key not in self._locks:
+				self._locks[key] = asyncio.Lock()
+			lock = self._locks[key]
+
+		async with lock:
+			if key in self._ready:
+				return
+
+			self._validate_source(app, source)
+			cache = self._cache_path(app, source)
+			await self._extract(self._apps[app][source], cache / "html")
+			await asyncio.to_thread(self._convert, cache / "html", cache / "markdown")
+			await self._build_index(cache / "markdown", cache / "index")
+			self._ready.add(key)
 
 	@staticmethod
 	def _find_7z() -> str:
@@ -109,18 +122,24 @@ class ChmExtractor:
 			"brew install p7zip (macOS) / winget install 7zip (Windows)"
 		)
 
-	def _extract(self, chm_path: Path, html_dir: Path) -> None:
+	async def _extract(self, chm_path: Path, html_dir: Path) -> None:
 		marker = html_dir / ".extracted"
 		if marker.exists():
 			return
 		html_dir.mkdir(parents=True, exist_ok=True)
 		cmd = self._find_7z()
-		subprocess.run(
-			[cmd, "x", str(chm_path), f"-o{html_dir}", "-y"],
-			check=True,
-			capture_output=True,
-			text=True,
+		process = await asyncio.create_subprocess_exec(
+			cmd,
+			"x",
+			str(chm_path),
+			f"-o{html_dir}",
+			"-y",
+			stdout=asyncio.subprocess.PIPE,
+			stderr=asyncio.subprocess.PIPE,
 		)
+		stdout, stderr = await process.communicate()
+		if process.returncode != 0:
+			raise RuntimeError(f"7z extraction failed: {stderr.decode()}")
 		marker.touch()
 
 	def _convert(self, html_dir: Path, md_dir: Path) -> None:
@@ -138,7 +157,7 @@ class ChmExtractor:
 		for html_file in html_files:
 			try:
 				raw_html = html_file.read_text(encoding="utf-8", errors="replace")
-				soup = BeautifulSoup(raw_html, "html.parser")
+				soup = BeautifulSoup(raw_html, "lxml")
 
 				# Strip common CHM navigation/chrome elements
 				for tag in soup.find_all(["script", "style", "nav", "header", "footer"]):
@@ -157,7 +176,7 @@ class ChmExtractor:
 
 		marker.touch()
 
-	def _build_index(self, md_dir: Path, index_dir: Path) -> None:
+	async def _build_index(self, md_dir: Path, index_dir: Path) -> None:
 		def documents():
 			for md_file in md_dir.rglob("*.md"):
 				try:
@@ -176,9 +195,11 @@ class ChmExtractor:
 				except Exception:
 					logger.warning("Failed to read %s for indexing, skipping", md_file, exc_info=True)
 
-		SearchIndex(index_dir).build(documents())
+		await SearchIndex(index_dir).build(documents())
 
-	def search(self, query: str, app: str | None = None, source: str | None = None, limit: int = 10) -> list[dict]:
+	async def search(
+		self, query: str, app: str | None = None, source: str | None = None, limit: int = 10
+	) -> list[dict]:
 		"""Search across CHM sources, optionally scoped by app and/or source.
 
 		Args:
@@ -206,15 +227,16 @@ class ChmExtractor:
 
 		results: list[dict] = []
 		for a, s in targets:
-			self._ensure_ready(a, s)
+			await self._ensure_ready(a, s)
 			index_dir = self._cache_path(a, s) / "index"
-			for hit in SearchIndex(index_dir).search(query, limit=limit):
+			hits = await SearchIndex(index_dir).search(query, limit=limit)
+			for hit in hits:
 				results.append({"app": a, "source": s, **hit})
 
 		results.sort(key=lambda r: r["score"], reverse=True)
 		return results[:limit]
 
-	def read_page(self, app: str, source: str, path: str) -> str:
+	async def read_page(self, app: str, source: str, path: str) -> str:
 		"""Read a single Markdown page.
 
 		Args:
@@ -230,7 +252,7 @@ class ChmExtractor:
 		    FileNotFoundError: If the page does not exist.
 		"""
 		self._validate_source(app, source)
-		self._ensure_ready(app, source)
+		await self._ensure_ready(app, source)
 
 		md_dir = self._cache_path(app, source) / "markdown"
 		resolved = (md_dir / path).resolve()
@@ -242,9 +264,11 @@ class ChmExtractor:
 		if not resolved.is_file():
 			raise FileNotFoundError(f"Page not found: {path}")
 
-		return resolved.read_text(encoding="utf-8").strip()
+		async with aiofiles.open(resolved, encoding="utf-8") as f:
+			content = await f.read()
+		return content.strip()
 
-	def list_pages(self, app: str, source: str, limit: int = 50, offset: int = 0) -> list[dict]:
+	async def list_pages(self, app: str, source: str, limit: int = 50, offset: int = 0) -> list[dict]:
 		"""List pages for a CHM source with pagination.
 
 		Args:
@@ -257,25 +281,10 @@ class ChmExtractor:
 		    List of dicts with keys: title, path.
 		"""
 		self._validate_source(app, source)
-		self._ensure_ready(app, source)
+		await self._ensure_ready(app, source)
 
-		md_dir = self._cache_path(app, source) / "markdown"
-		pages: list[dict] = []
-
-		for md_file in sorted(md_dir.rglob("*.md")):
-			rel_path = str(md_file.relative_to(md_dir))
-			title = rel_path
-			try:
-				for line in md_file.read_text(encoding="utf-8").splitlines():
-					line = line.strip()
-					if line:
-						title = line.lstrip("#").strip()
-						break
-			except Exception:
-				pass
-			pages.append({"title": title, "path": rel_path})
-
-		return pages[offset : offset + limit]
+		index_dir = self._cache_path(app, source) / "index"
+		return await SearchIndex(index_dir).list_documents(limit=limit, offset=offset)
 
 	def clear_cache(self, app: str | None = None, source: str | None = None) -> list[str]:
 		"""Delete cached data so it will be rebuilt on next access.

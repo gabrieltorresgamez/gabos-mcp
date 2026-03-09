@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -53,16 +53,18 @@ def extractor_with_html(tmp_path, sample_html_dir, tmp_cache):
 
 
 class TestConvert:
-	def test_converts_html_to_markdown(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_converts_html_to_markdown(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		md_dir = Path(tmp_cache) / "testapp" / "manual" / "markdown"
 
 		assert (md_dir / "page1.md").exists()
 		assert (md_dir / "page2.md").exists()
 		assert (md_dir / "subdir" / "nested.md").exists()
 
-	def test_strips_script_and_nav_tags(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_strips_script_and_nav_tags(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		md_dir = Path(tmp_cache) / "testapp" / "manual" / "markdown"
 
 		content = (md_dir / "page2.md").read_text()
@@ -70,77 +72,89 @@ class TestConvert:
 		assert "Nav" not in content
 		assert "API Reference" in content
 
-	def test_marker_prevents_reconversion(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_marker_prevents_reconversion(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		md_dir = Path(tmp_cache) / "testapp" / "manual" / "markdown"
 
 		# Delete an md file, re-run — marker should prevent reconversion
 		(md_dir / "page1.md").unlink()
 		extractor_with_html._ready.discard("testapp/manual")
-		extractor_with_html._ensure_ready("testapp", "manual")
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		assert not (md_dir / "page1.md").exists()
 
 
 class TestIndex:
-	def test_builds_searchable_index(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_builds_searchable_index(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		index_dir = Path(tmp_cache) / "testapp" / "manual" / "index"
 		assert (index_dir / ".indexed").exists()
 
-	def test_search_returns_results(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		results = extractor_with_html.search("API Reference", app="testapp", source="manual")
+	@pytest.mark.asyncio
+	async def test_search_returns_results(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		results = await extractor_with_html.search("API Reference", app="testapp", source="manual")
 		assert len(results) > 0
 		assert any("API Reference" in r["title"] for r in results)
 
-	def test_search_includes_app_field(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		results = extractor_with_html.search("welcome", app="testapp")
+	@pytest.mark.asyncio
+	async def test_search_includes_app_field(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		results = await extractor_with_html.search("welcome", app="testapp")
 		assert len(results) > 0
 		assert all(r["app"] == "testapp" for r in results)
 
-	def test_search_across_all_apps(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		results = extractor_with_html.search("welcome")
+	@pytest.mark.asyncio
+	async def test_search_across_all_apps(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		results = await extractor_with_html.search("welcome")
 		assert len(results) > 0
 
-	def test_search_no_results(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		results = extractor_with_html.search("xyznonexistent123")
+	@pytest.mark.asyncio
+	async def test_search_no_results(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		results = await extractor_with_html.search("xyznonexistent123")
 		assert results == []
 
-	def test_search_source_without_app_raises(self, extractor_with_html):
+	@pytest.mark.asyncio
+	async def test_search_source_without_app_raises(self, extractor_with_html):
 		with pytest.raises(ValueError, match="Cannot specify source without app"):
-			extractor_with_html.search("test", source="manual")
+			await extractor_with_html.search("test", source="manual")
 
 
 class TestReadPage:
-	def test_reads_existing_page(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		content = extractor_with_html.read_page("testapp", "manual", "page1.md")
+	@pytest.mark.asyncio
+	async def test_reads_existing_page(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		content = await extractor_with_html.read_page("testapp", "manual", "page1.md")
 		assert "Getting Started" in content
 
-	def test_rejects_path_traversal(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_rejects_path_traversal(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		with pytest.raises(ValueError, match="Invalid path"):
-			extractor_with_html.read_page("testapp", "manual", "../../etc/passwd")
+			await extractor_with_html.read_page("testapp", "manual", "../../etc/passwd")
 
-	def test_raises_on_missing_page(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_raises_on_missing_page(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		with pytest.raises(FileNotFoundError):
-			extractor_with_html.read_page("testapp", "manual", "nonexistent.md")
+			await extractor_with_html.read_page("testapp", "manual", "nonexistent.md")
 
 
 class TestListPages:
-	def test_lists_all_pages(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		pages = extractor_with_html.list_pages("testapp", "manual", limit=100)
+	@pytest.mark.asyncio
+	async def test_lists_all_pages(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		pages = await extractor_with_html.list_pages("testapp", "manual", limit=100)
 		assert len(pages) == 3
 
-	def test_pagination(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
-		page1 = extractor_with_html.list_pages("testapp", "manual", limit=1, offset=0)
-		page2 = extractor_with_html.list_pages("testapp", "manual", limit=1, offset=1)
+	@pytest.mark.asyncio
+	async def test_pagination(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		page1 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=0)
+		page2 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=1)
 		assert len(page1) == 1
 		assert len(page2) == 1
 		assert page1[0]["path"] != page2[0]["path"]
@@ -166,19 +180,22 @@ class TestListSources:
 
 
 class TestValidation:
-	def test_unknown_app_raises(self, tmp_cache):
+	@pytest.mark.asyncio
+	async def test_unknown_app_raises(self, tmp_cache):
 		ext = ChmExtractor(apps={}, cache_dir=tmp_cache)
 		with pytest.raises(ValueError, match="Unknown app"):
-			ext.search("test", app="nonexistent")
+			await ext.search("test", app="nonexistent")
 
-	def test_unknown_source_raises(self, extractor_with_html):
+	@pytest.mark.asyncio
+	async def test_unknown_source_raises(self, extractor_with_html):
 		with pytest.raises(ValueError, match="Unknown source"):
-			extractor_with_html.read_page("testapp", "nonexistent", "page.md")
+			await extractor_with_html.read_page("testapp", "nonexistent", "page.md")
 
 
 class TestClearCache:
-	def test_clears_specific_source(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_clears_specific_source(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		cache = Path(tmp_cache) / "testapp" / "manual"
 		assert cache.exists()
 
@@ -188,39 +205,46 @@ class TestClearCache:
 		assert len(cleared) == 1
 		assert "testapp" in cleared[0]
 
-	def test_clears_all_sources_for_app(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_clears_all_sources_for_app(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		cleared = extractor_with_html.clear_cache(app="testapp")
 		assert len(cleared) == 1
 
-	def test_clears_all(self, extractor_with_html, tmp_cache):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_clears_all(self, extractor_with_html, tmp_cache):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		cleared = extractor_with_html.clear_cache()
 		assert len(cleared) == 1
 
-	def test_returns_empty_when_nothing_cached(self, tmp_path, tmp_cache):
+	@pytest.mark.asyncio
+	async def test_returns_empty_when_nothing_cached(self, tmp_path, tmp_cache):
 		chm_path = tmp_path / "test.chm"
 		chm_path.touch()
 		ext = ChmExtractor(apps={"testapp": {"manual": str(chm_path)}}, cache_dir=tmp_cache)
 		assert ext.clear_cache() == []
 
-	def test_removes_from_ready_set(self, extractor_with_html):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_removes_from_ready_set(self, extractor_with_html):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		assert "testapp/manual" in extractor_with_html._ready
 
 		extractor_with_html.clear_cache(app="testapp", source="manual")
 		assert "testapp/manual" not in extractor_with_html._ready
 
-	def test_source_without_app_raises(self, extractor_with_html):
+	@pytest.mark.asyncio
+	async def test_source_without_app_raises(self, extractor_with_html):
 		with pytest.raises(ValueError, match="Cannot specify source without app"):
 			extractor_with_html.clear_cache(source="manual")
 
-	def test_unknown_app_raises(self, extractor_with_html):
+	@pytest.mark.asyncio
+	async def test_unknown_app_raises(self, extractor_with_html):
 		with pytest.raises(ValueError, match="Unknown app"):
 			extractor_with_html.clear_cache(app="nonexistent")
 
-	def test_rebuild_works_after_clear(self, extractor_with_html, tmp_cache, sample_html_dir):
-		extractor_with_html._ensure_ready("testapp", "manual")
+	@pytest.mark.asyncio
+	async def test_rebuild_works_after_clear(self, extractor_with_html, tmp_cache, sample_html_dir):
+		await extractor_with_html._ensure_ready("testapp", "manual")
 		extractor_with_html.clear_cache(app="testapp", source="manual")
 
 		# Re-create the html symlink so _extract marker is present again
@@ -228,30 +252,37 @@ class TestClearCache:
 		chm_cache.parent.mkdir(parents=True, exist_ok=True)
 		chm_cache.symlink_to(sample_html_dir)
 
-		extractor_with_html._ensure_ready("testapp", "manual")
-		results = extractor_with_html.search("welcome", app="testapp")
+		await extractor_with_html._ensure_ready("testapp", "manual")
+		results = await extractor_with_html.search("welcome", app="testapp")
 		assert len(results) > 0
 
 
 class TestExtract:
-	def test_calls_7z(self, tmp_path, tmp_cache):
+	@pytest.mark.asyncio
+	async def test_calls_7z(self, tmp_path, tmp_cache):
 		chm_path = tmp_path / "test.chm"
 		chm_path.touch()
 
 		ext = ChmExtractor(apps={"myapp": {"docs": str(chm_path)}}, cache_dir=tmp_cache)
 		html_dir = Path(tmp_cache) / "myapp" / "docs" / "html"
 
+		# Create a dummy process that simulate a successful extraction
+		dummy_process = AsyncMock()
+		dummy_process.returncode = 0
+		dummy_process.communicate.return_value = (b"", b"")
+
 		with (
 			patch("gabos_mcp.extractors.chm.shutil.which", return_value="/usr/bin/7z"),
-			patch("gabos_mcp.extractors.chm.subprocess.run") as mock_run,
+			patch("gabos_mcp.extractors.chm.asyncio.create_subprocess_exec", return_value=dummy_process) as mock_run,
 		):
-			ext._extract(chm_path, html_dir)
+			await ext._extract(chm_path, html_dir)
 			mock_run.assert_called_once()
-			args = mock_run.call_args[0][0]
+			args = mock_run.call_args[0]
 			assert args[0].endswith("7z") or args[0].endswith("7z.exe")
 			assert str(chm_path) in args
 
-	def test_raises_when_7z_missing(self, tmp_path, tmp_cache):
+	@pytest.mark.asyncio
+	async def test_raises_when_7z_missing(self, tmp_path, tmp_cache):
 		chm_path = tmp_path / "test.chm"
 		chm_path.touch()
 
@@ -262,4 +293,4 @@ class TestExtract:
 			patch("gabos_mcp.extractors.chm.shutil.which", return_value=None),
 			pytest.raises(RuntimeError, match="7z is required"),
 		):
-			ext._extract(chm_path, html_dir)
+			await ext._extract(chm_path, html_dir)

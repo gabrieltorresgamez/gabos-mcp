@@ -26,37 +26,9 @@ When all three `GITHUB_*`/`MCP_BASE_URL` variables are set, the server requires 
 
 ## Connect
 
-### Claude Desktop (stdio)
-
-Add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "gabos-mcp": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/gabos-mcp-repo", "gabos-mcp"]
-    }
-  }
-}
-```
-
-### IDE (Zed) — Local (stdio)
-
-Add to `.zed/settings.json`:
-
-```json
-{
-  "gabos-mcp": {
-    "command": "uv",
-    "args": ["run", "--directory", "/path/to/gabos-mcp-repo", "gabos-mcp"]
-  }
-}
-```
-
 ### Claude Desktop — Remote (OAuth)
 
-Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL (e.g. `https://mcp.fuet.ch/mcp`). Claude Desktop handles the OAuth flow automatically — it registers itself via Dynamic Client Registration, opens a browser window for GitHub login, and manages token refresh.
+Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP", and enter the server URL (e.g. `https://mcp.example.ch/mcp`). Claude Desktop handles the OAuth flow automatically — it registers itself via Dynamic Client Registration, opens a browser window for GitHub login, and manages token refresh.
 
 ### Claude Code — Remote (OAuth)
 
@@ -65,11 +37,3 @@ claude mcp add --transport http gabos-mcp https://mcp.fuet.ch/mcp
 ```
 
 On first use, Claude Code opens your browser to complete the GitHub OAuth flow. Tokens are stored locally and refreshed automatically.
-
-## Development
-
-Interactive web UI with hot-reload:
-
-```bash
-uv run fastmcp dev inspector src/gabos_mcp/server.py --with-editable .
-```
