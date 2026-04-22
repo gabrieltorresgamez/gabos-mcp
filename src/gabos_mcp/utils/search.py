@@ -142,3 +142,9 @@ class SearchIndex:
 		rows = await cursor.fetchall()
 
 		return [{"title": title, "path": path} for path, title in rows]
+
+	async def close(self) -> None:
+		"""Close the database connection and release the background thread."""
+		if self._conn is not None:
+			await self._conn.close()
+			self._conn = None

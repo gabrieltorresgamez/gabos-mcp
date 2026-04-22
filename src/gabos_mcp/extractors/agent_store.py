@@ -452,3 +452,9 @@ class AgentStore:
 			raise PermissionError("You can only delete doc refs from your own agents.")
 		await conn.execute("DELETE FROM agent_doc_refs WHERE id = ?", (ref_id,))
 		await conn.commit()
+
+	async def close(self) -> None:
+		"""Close the database connection and release the background thread."""
+		if self._conn is not None:
+			await self._conn.close()
+			self._conn = None

@@ -13,14 +13,16 @@ from gabos_mcp.extractors.knowledge import KnowledgeStore
 async def agent_store(tmp_path):
 	s = AgentStore(db_path=str(tmp_path / "agents.db"))
 	await s.migrate()
-	return s
+	yield s
+	await s.close()
 
 
 @pytest_asyncio.fixture
 async def knowledge_store(tmp_path):
 	s = KnowledgeStore(db_path=str(tmp_path / "knowledge.db"))
 	await s.migrate()
-	return s
+	yield s
+	await s.close()
 
 
 @pytest_asyncio.fixture

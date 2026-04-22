@@ -8,7 +8,8 @@ from gabos_mcp.extractors.knowledge import KnowledgeStore
 async def store(tmp_path):
 	s = KnowledgeStore(db_path=str(tmp_path / "knowledge.db"))
 	await s.migrate()
-	return s
+	yield s
+	await s.close()
 
 
 @pytest.mark.asyncio

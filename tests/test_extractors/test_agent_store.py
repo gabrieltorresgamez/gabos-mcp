@@ -8,7 +8,8 @@ from gabos_mcp.extractors.agent_store import AgentStore
 async def store(tmp_path):
 	s = AgentStore(db_path=str(tmp_path / "agents.db"))
 	await s.migrate()
-	return s
+	yield s
+	await s.close()
 
 
 @pytest.mark.asyncio

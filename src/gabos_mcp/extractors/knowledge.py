@@ -262,3 +262,9 @@ class KnowledgeStore:
 		conn = await self._connect()
 		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
 		await conn.commit()
+
+	async def close(self) -> None:
+		"""Close the database connection and release the background thread."""
+		if self._conn is not None:
+			await self._conn.close()
+			self._conn = None

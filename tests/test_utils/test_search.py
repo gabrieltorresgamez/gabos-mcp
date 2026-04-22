@@ -22,7 +22,8 @@ def sample_docs():
 async def built_index(index_dir, sample_docs):
 	idx = SearchIndex(index_dir)
 	await idx.build(iter(sample_docs))
-	return idx
+	yield idx
+	await idx.close()
 
 
 @pytest.mark.asyncio
