@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -96,6 +97,7 @@ class KnowledgeStore:
 		Returns:
 		    List of entry dicts ordered by relevance (best first).
 		"""
+		fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
 		conn = await self._connect()
 		if tag:
 			cursor = await conn.execute(
@@ -104,14 +106,14 @@ class KnowledgeStore:
 				"WHERE knowledge_fts MATCH ? "
 				"AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
 				"ORDER BY knowledge_fts.rank LIMIT ?",
-				(query, tag, limit),
+				(fts_query, tag, limit),
 			)
 		else:
 			cursor = await conn.execute(
 				"SELECT k.* FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
 				"WHERE knowledge_fts MATCH ? ORDER BY knowledge_fts.rank LIMIT ?",
-				(query, limit),
+				(fts_query, limit),
 			)
 		rows = await cursor.fetchall()
 		return [self._row_to_dict(r) for r in rows]
