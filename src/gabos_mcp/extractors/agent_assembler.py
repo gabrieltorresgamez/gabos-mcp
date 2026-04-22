@@ -191,15 +191,18 @@ class AgentAssembler:
 		doc_refs = await self._agents.list_doc_refs(agent.name, context_keys=context_keys)
 		doc_page_count = 0
 		if doc_refs and self._chm is not None:
-			sections.append("## Documentation Pages\n")
+			doc_sections: list[str] = []
 			for ref in doc_refs:
 				try:
 					page_content = await self._chm.read_page(ref.app, ref.source, ref.page_path)
 					note = f" — {ref.relevance_note}" if ref.relevance_note else ""
-					sections.append(f"### {ref.app}/{ref.source}/{ref.page_path}{note}\n\n{page_content}\n")
+					doc_sections.append(f"### {ref.app}/{ref.source}/{ref.page_path}{note}\n\n{page_content}\n")
 					doc_page_count += 1
 				except Exception:
 					logger.warning("Failed to read CHM page %s/%s/%s", ref.app, ref.source, ref.page_path)
+			if doc_sections:
+				sections.append("## Documentation Pages\n")
+				sections.extend(doc_sections)
 
 		if folder_context:
 			sections.append(f"## Current Folder Context\n\n`{folder_context}`\n")

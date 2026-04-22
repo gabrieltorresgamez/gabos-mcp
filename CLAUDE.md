@@ -43,7 +43,7 @@ src/gabos_mcp/
 ├── server.py          # FastMCP instance + wiring (imports and registers all components)
 ├── main.py            # Entrypoint — selects transport via env vars, runs server
 ├── tools/             # @mcp.tool functions, grouped by domain
-│   ├── agents.py      # agent_* tools: CRUD + ask + doc refs
+│   ├── agents.py      # agent_* tools: CRUD + context + learn + doc refs
 │   ├── chm.py         # docs_* tools: CHM documentation search/read
 │   └── knowledge.py   # knowledge_* tools: shared knowledge store
 ├── extractors/        # Plain Python classes for non-trivial data fetching/parsing
@@ -63,7 +63,7 @@ src/gabos_mcp/
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
 
-**Tool naming convention:** Use `module_verb` or `module_verb_noun` so tools group alphabetically by module. Examples: `docs_search`, `docs_read_page`, `knowledge_add`, `knowledge_list`, `agent_ask`, `agent_doc_ref_add`. Never use `verb_module` or `verb_module_noun`.
+**Tool naming convention:** Use `module_verb` or `module_verb_noun` so tools group alphabetically by module. Examples: `docs_search`, `docs_read_page`, `knowledge_add`, `knowledge_list`, `agent_context`, `agent_doc_ref_add`. Never use `verb_module` or `verb_module_noun`.
 
 ## Agents
 
