@@ -115,7 +115,13 @@ def register(mcp: FastMCP) -> None:
 
 	@mcp.tool
 	async def agent_delete(name_or_id: str) -> str:
-		"""Delete an agent and all its linked documentation references. Only the owner can delete."""
+		"""Delete an agent and all its linked documentation references. Only the owner can delete.
+
+		IMPORTANT: Knowledge entries are NOT deleted. Any entries in the knowledge store
+		tagged with agent:<name> (or agent:<name>:folder:<key>) are stored independently
+		and will remain after the agent is deleted. Remove them explicitly with
+		knowledge_delete if they are no longer needed.
+		"""
 		user = get_github_login()
 		if user == "anonymous":
 			raise PermissionError("Authentication required to delete agents.")
@@ -170,8 +176,14 @@ def register(mcp: FastMCP) -> None:
 	) -> str:
 		"""Manually save a learning for an agent into the knowledge store.
 
-		The tag agent:<name> is added automatically. Use this to directly record
-		facts, field lists, API patterns, or anything the agent should know.
+		Knowledge entries are stored in the shared knowledge store (not inside the
+		agent record itself). The tag agent:<name> is added automatically so
+		agent_context can retrieve them, but the entries exist independently — deleting
+		the agent does NOT delete these knowledge entries. Use knowledge_delete to
+		remove individual entries when they are no longer needed.
+
+		Use this to directly record facts, field lists, API patterns, or anything
+		the agent should know.
 
 		Args:
 		    agent: Agent name or ID.
