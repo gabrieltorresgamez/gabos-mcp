@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import TYPE_CHECKING
 
-from platformdirs import user_data_path
-
-from gabos_mcp.extractors.knowledge import KnowledgeStore
 from gabos_mcp.utils.auth import get_github_login
+from gabos_mcp.utils.stores import get_knowledge_store
 
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
@@ -17,11 +14,7 @@ if TYPE_CHECKING:
 
 def register(mcp: FastMCP) -> None:
 	"""Register knowledge tools and resources on the given FastMCP instance."""
-	db_path = os.environ.get(
-		"GABOS_KNOWLEDGE_DB",
-		str(user_data_path("gabos-mcp") / "knowledge.db"),
-	)
-	store = KnowledgeStore(db_path=db_path)
+	store = get_knowledge_store()
 
 	@mcp.tool
 	async def knowledge_add(title: str, content: str, tags: list[str] | None = None) -> str:

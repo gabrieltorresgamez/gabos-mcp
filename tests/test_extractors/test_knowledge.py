@@ -121,6 +121,38 @@ class TestUpdate:
 
 
 @pytest.mark.asyncio
+class TestSearch:
+	async def test_finds_by_title(self, store):
+		await store.add(owner="alice", title="Python tips", content="Use list comprehensions")
+		results = await store.search("Python")
+		assert len(results) == 1
+		assert results[0]["title"] == "Python tips"
+
+	async def test_finds_by_content(self, store):
+		await store.add(owner="alice", title="Notes", content="SQLite FTS5 is fast")
+		results = await store.search("FTS5")
+		assert len(results) == 1
+
+	async def test_returns_empty_for_no_match(self, store):
+		await store.add(owner="alice", title="Notes", content="Hello world")
+		results = await store.search("xyzzy")
+		assert results == []
+
+	async def test_filter_by_tag(self, store):
+		await store.add(owner="alice", title="Python tips", content="Use comprehensions", tags=["python"])
+		await store.add(owner="alice", title="Python guide", content="Use comprehensions too", tags=["go"])
+		results = await store.search("comprehensions", tag="python")
+		assert len(results) == 1
+		assert results[0]["title"] == "Python tips"
+
+	async def test_respects_limit(self, store):
+		for i in range(5):
+			await store.add(owner="alice", title=f"Entry {i}", content="common keyword here")
+		results = await store.search("keyword", limit=2)
+		assert len(results) <= 2
+
+
+@pytest.mark.asyncio
 class TestDelete:
 	async def test_deletes_entry(self, store):
 		entry = await store.add(owner="alice", title="T", content="C")

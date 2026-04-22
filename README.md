@@ -18,6 +18,8 @@ Configure via `docker-compose.yml` (copy from `docker-compose.yml-example`). Env
 | `GABOS_CHM_FILES`      | `{}`                                    | JSON mapping of apps to CHM file paths            |
 | `GABOS_CHM_CACHE_DIR`  | _(auto)_                                | Override CHM cache directory                      |
 | `GABOS_KNOWLEDGE_DB`   | `~/.local/share/gabos-mcp/knowledge.db` | Path to the knowledge SQLite database             |
+| `GABOS_AGENTS_DB`      | `~/.local/share/gabos-mcp/agents.db`    | Path to the agents SQLite database                |
+| `ANTHROPIC_API_KEY`    | _(none)_                                | Anthropic API key (required for `agent_ask`)      |
 | `GITHUB_CLIENT_ID`     | _(none)_                                | GitHub OAuth app client ID (enables OAuth)        |
 | `GITHUB_CLIENT_SECRET` | _(none)_                                | GitHub OAuth app client secret                    |
 | `MCP_BASE_URL`         | _(none)_                                | Public URL of the server (e.g. `https://my.host`) |

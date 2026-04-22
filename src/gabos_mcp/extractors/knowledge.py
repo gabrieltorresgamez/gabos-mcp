@@ -47,6 +47,36 @@ class KnowledgeStore:
 				updated_at TEXT NOT NULL
 			)
 		""")
+		await conn.execute("""
+			CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts
+			USING fts5(id UNINDEXED, title, content,
+			           tokenize='trigram', content='knowledge', content_rowid='rowid')
+		""")
+		await conn.execute("""
+			CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert
+			AFTER INSERT ON knowledge BEGIN
+				INSERT INTO knowledge_fts(rowid, id, title, content)
+				VALUES (new.rowid, new.id, new.title, new.content);
+			END
+		""")
+		await conn.execute("""
+			CREATE TRIGGER IF NOT EXISTS knowledge_fts_update
+			AFTER UPDATE ON knowledge BEGIN
+				INSERT INTO knowledge_fts(knowledge_fts, rowid, id, title, content)
+				VALUES ('delete', old.rowid, old.id, old.title, old.content);
+				INSERT INTO knowledge_fts(rowid, id, title, content)
+				VALUES (new.rowid, new.id, new.title, new.content);
+			END
+		""")
+		await conn.execute("""
+			CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete
+			AFTER DELETE ON knowledge BEGIN
+				INSERT INTO knowledge_fts(knowledge_fts, rowid, id, title, content)
+				VALUES ('delete', old.rowid, old.id, old.title, old.content);
+			END
+		""")
+		# Populate FTS index for any existing rows (idempotent rebuild).
+		await conn.execute("INSERT INTO knowledge_fts(knowledge_fts) VALUES('rebuild')")
 		await conn.commit()
 
 	@staticmethod
@@ -54,6 +84,37 @@ class KnowledgeStore:
 		d = dict(row)
 		d["tags"] = json.loads(str(d["tags"]))
 		return d
+
+	async def search(self, query: str, tag: str | None = None, limit: int = 10) -> list[dict]:
+		"""Full-text search over knowledge entries, ranked by relevance.
+
+		Args:
+		    query: Search terms (FTS5 trigram match).
+		    tag: Optional tag to restrict results to.
+		    limit: Maximum number of results.
+
+		Returns:
+		    List of entry dicts ordered by relevance (best first).
+		"""
+		conn = await self._connect()
+		if tag:
+			cursor = await conn.execute(
+				"SELECT k.* FROM knowledge_fts "
+				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
+				"WHERE knowledge_fts MATCH ? "
+				"AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
+				"ORDER BY knowledge_fts.rank LIMIT ?",
+				(query, tag, limit),
+			)
+		else:
+			cursor = await conn.execute(
+				"SELECT k.* FROM knowledge_fts "
+				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
+				"WHERE knowledge_fts MATCH ? ORDER BY knowledge_fts.rank LIMIT ?",
+				(query, limit),
+			)
+		rows = await cursor.fetchall()
+		return [self._row_to_dict(r) for r in rows]
 
 	async def add(self, owner: str, title: str, content: str, tags: list[str] | None = None) -> dict:
 		"""Create a new knowledge entry.
