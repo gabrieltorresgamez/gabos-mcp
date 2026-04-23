@@ -41,9 +41,9 @@ Agents are domain experts stored in the database. Each agent has a system prompt
 
 ```mermaid
 sequenceDiagram
+    participant Claude
     participant You
     participant MCP
-    participant Claude
 
     You->>MCP: agent_context(agent, query, folder_context?)
     MCP-->>You: system_prompt + context_markdown
