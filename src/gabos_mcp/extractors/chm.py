@@ -85,7 +85,10 @@ class ChmExtractor:
 	async def _ensure_ready(self, app: str, source: str) -> None:
 		key = self._cache_key(app, source)
 		if key in self._ready:
-			return
+			# Re-verify the index marker exists — the cache may have been deleted externally.
+			if (self._cache_path(app, source) / "index" / ".indexed").exists():
+				return
+			self._ready.discard(key)
 
 		async with self._global_lock:
 			if key not in self._locks:

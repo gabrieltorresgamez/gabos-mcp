@@ -16,10 +16,10 @@ uv run gabos-mcp
 uv run pytest
 
 # Run a single test file
-uv run pytest tests/test_tools/test_example.py
+uv run pytest tests/test_tools/test_agents.py
 
 # Run a single test
-uv run pytest tests/test_tools/test_example.py::test_name
+uv run pytest tests/test_tools/test_agents.py::TestAgentRead::test_fetch_by_name
 
 # Lint
 uv run ruff check .
@@ -43,9 +43,9 @@ src/gabos_mcp/
 ├── server.py          # FastMCP instance + wiring (imports and registers all components)
 ├── main.py            # Entrypoint — selects transport via env vars, runs server
 ├── tools/             # @mcp.tool functions, grouped by domain
-│   ├── agents.py      # agent_* tools: CRUD + context + learn + doc refs
-│   ├── chm.py         # docs_* tools: CHM documentation search/read
-│   └── knowledge.py   # knowledge_* tools: shared knowledge store
+│   ├── agents.py      # agent_* tools: read + context + extract_learnings + write + delete
+│   ├── chm.py         # docs_* tools: search + polymorphic read
+│   └── knowledge.py   # knowledge_* tools: read + write + delete
 ├── extractors/        # Plain Python classes for non-trivial data fetching/parsing
 │   ├── agent_store.py # AgentStore: SQLite (agents + agent_doc_refs tables)
 │   ├── agent_assembler.py # AgentAssembler: context assembly + ctx.sample() learning loop
@@ -63,7 +63,24 @@ src/gabos_mcp/
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
 
-**Tool naming convention:** Use `module_verb` or `module_verb_noun` so tools group alphabetically by module. Examples: `docs_search`, `docs_read_page`, `knowledge_add`, `knowledge_list`, `agent_context`, `agent_doc_ref_add`. Never use `verb_module` or `verb_module_noun`.
+**Tool naming convention:** Use `module_verb` so tools group alphabetically by module. Examples: `docs_search`, `docs_read`, `knowledge_read`, `knowledge_write`, `agent_context`, `agent_write`. Never use `verb_module`.
+
+## Tools (10 total)
+
+Suffix convention: `_read`/`_search`/`_context` = read-only; `_write`/`_extract_learnings` = creates/modifies data; `_delete` = destructive.
+
+| Tool                      | Side effect | Description                                                                                       |
+| ------------------------- | ----------- | ------------------------------------------------------------------------------------------------- |
+| `agent_read`              | read        | List visible agents or fetch one by name/ID (with optional doc refs)                              |
+| `agent_context`           | read        | Assemble system prompt + knowledge + CHM context for a query                                      |
+| `agent_extract_learnings` | write       | Extract and persist learnings from a Q&A via `ctx.sample()`                                       |
+| `agent_write`             | write       | Create or update an agent; accepts `doc_refs` and `learnings` fields                              |
+| `agent_delete`            | delete      | Delete an agent, or remove specific doc refs by ID                                                |
+| `knowledge_read`          | read        | Fetch a single knowledge entry by ID or list entries                                              |
+| `knowledge_write`         | write       | Create or update a knowledge entry                                                                |
+| `knowledge_delete`        | delete      | Delete a knowledge entry (owner only)                                                             |
+| `docs_search`             | read        | Full-text search across CHM docs                                                                  |
+| `docs_read`               | read        | Browse or read CHM docs (no args → apps; app → sources; app+source → pages; +page_path → content) |
 
 ## Agents
 
@@ -72,8 +89,6 @@ Agents are multipurpose domain experts stored in the database (`agents.db`). Eac
 - A list of knowledge tags to auto-inject as context
 - A model setting and `auto_learn` flag
 
-**Agent tools:** `agent_create`, `agent_get`, `agent_list`, `agent_update`, `agent_delete`, `agent_context`, `agent_learn`, `agent_extract_learnings`, `agent_doc_ref_add`, `agent_doc_ref_list`, `agent_doc_ref_delete`
-
 **No external API key required.** Agents do not call Claude themselves — `agent_context` assembles and returns the context (system prompt + relevant knowledge + CHM doc pages) for the active Claude session to use directly. Learning is opt-in via `agent_extract_learnings`, which calls `ctx.sample()` on the already-active session.
 
 **Workflow:**
@@ -81,7 +96,9 @@ Agents are multipurpose domain experts stored in the database (`agents.db`). Eac
 2. Use `system_prompt` as persona and `context_markdown` as injected knowledge to answer the query
 3. Optionally call `agent_extract_learnings(agent, query, answer, referenced_chm_pages?)` to persist what was learned
 
-**Permissions:** Only the agent's owner can update, delete it, or modify its doc refs. Any authenticated user can read agents and retrieve context.
+**Permission model:** Owner-only writes and deletes. Reads open to all authenticated users; private items hidden from non-owners.
+
+**Agent-tag ownership check (`_assert_agent_tags_owned`):** Any knowledge entry that uses a tag of the form `agent:<name>` or `agent:<name>:folder:<key>` requires the caller to own that agent. This is enforced in `knowledge_write` and resolved in bulk via `AgentStore.get_many()`.
 
 **Knowledge tag convention:**
 - `agent:<name>` — global knowledge for this agent
@@ -90,6 +107,7 @@ Agents are multipurpose domain experts stored in the database (`agents.db`). Eac
 **Environment variables:**
 - `GABOS_AGENTS_DB` — path to agents SQLite DB (default: `~/.local/share/gabos-mcp/agents.db`)
 - `GABOS_KNOWLEDGE_DB` — path to knowledge SQLite DB (default: `~/.local/share/gabos-mcp/knowledge.db`)
+- `GABOS_CHM_CACHE_DIR` — CHM cache directory (default: `~/.cache/gabos-mcp/chm`); delete subdirs to invalidate
 - `GABOS_BACKUP_DIR` — backup folder (backups disabled when unset)
 - `GABOS_BACKUP_TIME` — daily backup time in 24h format (default: `02:00`)
 - `GABOS_BACKUP_RETENTION_DAYS` — days to keep backups, 0 = forever (default: `30`)

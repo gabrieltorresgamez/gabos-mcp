@@ -210,29 +210,3 @@ class TestDelete:
 		entry = await store.add(owner="alice", title="T", content="C")
 		with pytest.raises(PermissionError, match="only delete your own"):
 			await store.delete(id=entry["id"], owner="bob")
-
-
-@pytest.mark.asyncio
-class TestDeleteUnchecked:
-	async def test_deletes_without_ownership_check(self, store):
-		entry = await store.add(owner="alice", title="T", content="C")
-		await store.delete_unchecked(entry["id"])
-		assert await store.get(entry["id"]) is None
-
-	async def test_raises_on_missing_entry(self, store):
-		with pytest.raises(KeyError, match="not found"):
-			await store.delete_unchecked("bad-id")
-
-
-@pytest.mark.asyncio
-class TestRemoveTags:
-	async def test_removes_specified_tags(self, store):
-		entry = await store.add(owner="alice", title="T", content="C", tags=["agent:foo", "agent:bar", "other"])
-		updated = await store.remove_tags(entry["id"], ["agent:foo"])
-		assert "agent:foo" not in updated["tags"]
-		assert "agent:bar" in updated["tags"]
-		assert "other" in updated["tags"]
-
-	async def test_raises_on_missing_entry(self, store):
-		with pytest.raises(KeyError, match="not found"):
-			await store.remove_tags("bad-id", ["agent:foo"])

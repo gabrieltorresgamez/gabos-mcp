@@ -41,7 +41,7 @@ def _parse_backup_time() -> time:
 	try:
 		h, m = raw.split(":")
 		return time(int(h), int(m))
-	except (ValueError, AttributeError):
+	except ValueError, AttributeError:
 		logger.error("Invalid GABOS_BACKUP_TIME %r, defaulting to 02:00", raw)
 		return time(2, 0)
 
@@ -60,7 +60,7 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 			try:
 				date_part = f.stem.split("_", 1)[1]
 				file_date = datetime.strptime(date_part, "%Y-%m-%d").date()
-			except (IndexError, ValueError):
+			except IndexError, ValueError:
 				continue
 			if file_date < cutoff:
 				f.unlink()

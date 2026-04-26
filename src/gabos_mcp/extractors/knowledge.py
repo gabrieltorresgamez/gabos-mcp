@@ -319,50 +319,6 @@ class KnowledgeStore:
 		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
 		await conn.commit()
 
-	async def delete_unchecked(self, id: str) -> None:
-		"""Delete an entry without an ownership check.
-
-		The caller is responsible for verifying authorization before calling this.
-
-		Raises:
-		    KeyError: If the entry does not exist.
-		"""
-		conn = await self._connect()
-		cursor = await conn.execute("SELECT id FROM knowledge WHERE id = ?", (id,))
-		if await cursor.fetchone() is None:
-			raise KeyError(f"Knowledge entry '{id}' not found.")
-		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
-		await conn.commit()
-
-	async def remove_tags(self, id: str, tags_to_remove: list[str]) -> dict:
-		"""Remove specific tags from an entry without an ownership check.
-
-		The caller is responsible for verifying authorization before calling this.
-
-		Args:
-		    id: Entry ID.
-		    tags_to_remove: Tags to remove from the entry.
-
-		Returns:
-		    The updated entry as a dict.
-
-		Raises:
-		    KeyError: If the entry does not exist.
-		"""
-		entry = await self.get(id)
-		if entry is None:
-			raise KeyError(f"Knowledge entry '{id}' not found.")
-		remove_set = set(tags_to_remove)
-		new_tags = [t for t in entry["tags"] if t not in remove_set]
-		now = _now()
-		conn = await self._connect()
-		await conn.execute(
-			"UPDATE knowledge SET tags = ?, updated_at = ? WHERE id = ?",
-			(json.dumps(new_tags), now, id),
-		)
-		await conn.commit()
-		return {**entry, "tags": new_tags, "updated_at": now}
-
 	async def close(self) -> None:
 		"""Close the database connection and release the background thread."""
 		if self._conn is not None:

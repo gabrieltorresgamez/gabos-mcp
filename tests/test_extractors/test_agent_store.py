@@ -171,10 +171,10 @@ class TestDocRefs:
 		with pytest.raises(PermissionError, match="only add doc refs"):
 			await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
 
-	async def test_non_owner_can_add_to_shared_agent(self, store):
+	async def test_non_owner_cannot_add_to_shared_agent(self, store):
 		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
-		assert ref.created_by == "bob"
+		with pytest.raises(PermissionError, match="only add doc refs"):
+			await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
 
 	async def test_filter_by_context_keys(self, store):
 		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
@@ -195,28 +195,21 @@ class TestDocRefs:
 			await store.add_doc_ref("ag", "_global", "APP", "src", "page")
 
 	async def test_agent_owner_can_delete_any_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
 		await store.delete_doc_ref(ref.id, caller="alice")
 		refs = await store.list_doc_refs("ag")
 		assert refs == []
 
-	async def test_creator_can_delete_own_ref_on_shared_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
-		await store.delete_doc_ref(ref.id, caller="bob")
-		refs = await store.list_doc_refs("ag")
-		assert refs == []
-
-	async def test_non_creator_cannot_delete_ref_on_shared_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
-		with pytest.raises(PermissionError, match="only delete doc refs"):
-			await store.delete_doc_ref(ref.id, caller="charlie")
-
-	async def test_non_owner_cannot_delete_ref_on_private_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
+	async def test_non_owner_cannot_delete_ref(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
 		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page")
+		with pytest.raises(PermissionError, match="only delete doc refs"):
+			await store.delete_doc_ref(ref.id, caller="bob")
+
+	async def test_non_owner_cannot_delete_ref_on_shared_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
 		with pytest.raises(PermissionError, match="only delete doc refs"):
 			await store.delete_doc_ref(ref.id, caller="bob")
 
@@ -233,3 +226,24 @@ class TestDocRefs:
 		await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
 		refs = await store.list_doc_refs("ag")
 		assert refs[0].created_by == "alice"
+
+
+@pytest.mark.asyncio
+class TestGetMany:
+	async def test_returns_agents_by_name(self, store):
+		await store.create(owner="alice", name="a1", description="D", system_prompt="P")
+		await store.create(owner="bob", name="a2", description="D", system_prompt="P")
+		result = await store.get_many(["a1", "a2"])
+		assert set(result.keys()) == {"a1", "a2"}
+		assert result["a1"].owner == "alice"
+		assert result["a2"].owner == "bob"
+
+	async def test_returns_empty_for_no_names(self, store):
+		result = await store.get_many([])
+		assert result == {}
+
+	async def test_ignores_missing_names(self, store):
+		await store.create(owner="alice", name="real", description="D", system_prompt="P")
+		result = await store.get_many(["real", "ghost"])
+		assert "real" in result
+		assert "ghost" not in result

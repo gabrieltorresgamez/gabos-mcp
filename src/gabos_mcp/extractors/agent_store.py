@@ -368,6 +368,19 @@ class AgentStore:
 
 	# ── Doc Ref CRUD ───────────────────────────────────────────────────────────
 
+	async def get_many(self, names: list[str]) -> dict[str, Agent]:
+		"""Return agents by name in a single query, keyed by name."""
+		if not names:
+			return {}
+		conn = await self._connect()
+		placeholders = ",".join("?" * len(names))
+		cursor = await conn.execute(
+			f"SELECT * FROM agents WHERE name IN ({placeholders})",
+			names,
+		)
+		rows = await cursor.fetchall()
+		return {r["name"]: self._row_to_agent(r) for r in rows}
+
 	async def add_doc_ref(
 		self,
 		agent_name_or_id: str,
@@ -378,7 +391,7 @@ class AgentStore:
 		relevance_note: str | None = None,
 		caller: str | None = None,
 	) -> DocRef:
-		"""Link a CHM page to an agent + context key.
+		"""Link a CHM page to an agent + context key. Only the agent owner may add refs.
 
 		Args:
 		    agent_name_or_id: Agent name or UUID.
@@ -387,21 +400,20 @@ class AgentStore:
 		    source: CHM source name.
 		    page_path: Page path within the CHM source.
 		    relevance_note: Optional note on why this page is relevant.
-		    caller: GitHub login of the caller. For private agents, must match the
-		            agent's owner. For shared agents, any authenticated user is allowed.
+		    caller: GitHub login of the caller. Must match the agent's owner.
 
 		Returns:
 		    The created DocRef.
 
 		Raises:
 		    KeyError: If the agent does not exist.
-		    PermissionError: If caller is not allowed to add refs to this agent.
+		    PermissionError: If caller is not the agent owner.
 		    ValueError: If the same ref already exists.
 		"""
 		agent = await self.get(agent_name_or_id)
 		if agent is None:
 			raise KeyError(f"Agent '{agent_name_or_id}' not found.")
-		if caller is not None and agent.owner != caller and not agent.shared:
+		if caller is not None and agent.owner != caller:
 			raise PermissionError("You can only add doc refs to your own agents.")
 
 		now = _now()
@@ -469,12 +481,7 @@ class AgentStore:
 		return [self._row_to_doc_ref(r) for r in rows]
 
 	async def delete_doc_ref(self, ref_id: str, caller: str | None = None) -> None:
-		"""Delete a doc ref by ID.
-
-		Permission rules:
-		- The agent's owner may delete any ref.
-		- For shared agents, the ref's creator (created_by) may delete their own ref.
-		- For private agents, only the agent owner may delete.
+		"""Delete a doc ref by ID. Only the agent owner may delete refs.
 
 		Args:
 		    ref_id: The UUID of the doc ref.
@@ -482,23 +489,18 @@ class AgentStore:
 
 		Raises:
 		    KeyError: If the ref does not exist.
-		    PermissionError: If caller is not allowed to delete this ref.
+		    PermissionError: If caller is not the agent owner.
 		"""
 		conn = await self._connect()
 		cursor = await conn.execute(
-			"SELECT dr.id, dr.created_by, a.owner, a.shared "
-			"FROM agent_doc_refs dr JOIN agents a ON dr.agent_id = a.id WHERE dr.id = ?",
+			"SELECT dr.id, a.owner FROM agent_doc_refs dr JOIN agents a ON dr.agent_id = a.id WHERE dr.id = ?",
 			(ref_id,),
 		)
 		row = await cursor.fetchone()
 		if row is None:
 			raise KeyError(f"Doc ref '{ref_id}' not found.")
-		if caller is not None:
-			agent_owner = str(row["owner"])
-			ref_creator = str(row["created_by"])
-			is_shared = bool(row["shared"])
-			if caller != agent_owner and not (is_shared and caller == ref_creator):
-				raise PermissionError("You can only delete doc refs from your own agents.")
+		if caller is not None and caller != str(row["owner"]):
+			raise PermissionError("You can only delete doc refs from your own agents.")
 		await conn.execute("DELETE FROM agent_doc_refs WHERE id = ?", (ref_id,))
 		await conn.commit()
 
