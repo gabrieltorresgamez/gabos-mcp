@@ -89,6 +89,10 @@ Agents are multipurpose domain experts stored in the database (`agents.db`). Eac
 
 **Environment variables:**
 - `GABOS_AGENTS_DB` — path to agents SQLite DB (default: `~/.local/share/gabos-mcp/agents.db`)
+- `GABOS_KNOWLEDGE_DB` — path to knowledge SQLite DB (default: `~/.local/share/gabos-mcp/knowledge.db`)
+- `GABOS_BACKUP_DIR` — backup folder (backups disabled when unset)
+- `GABOS_BACKUP_TIME` — daily backup time in 24h format (default: `02:00`)
+- `GABOS_BACKUP_RETENTION_DAYS` — days to keep backups, 0 = forever (default: `30`)
 
 ## After Every Code Change
 

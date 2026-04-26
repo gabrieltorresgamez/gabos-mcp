@@ -17,13 +17,35 @@ Configure via `docker-compose.yml` (copy from `docker-compose.yml-example`). Env
 | `MCP_PORT`             | `8000`                                  | Listen port (HTTP only)                           |
 | `GABOS_CHM_FILES`      | `{}`                                    | JSON mapping of apps to CHM file paths            |
 | `GABOS_CHM_CACHE_DIR`  | _(auto)_                                | Override CHM cache directory                      |
-| `GABOS_KNOWLEDGE_DB`   | `~/.local/share/gabos-mcp/knowledge.db` | Path to the knowledge SQLite database             |
-| `GABOS_AGENTS_DB`      | `~/.local/share/gabos-mcp/agents.db`    | Path to the agents SQLite database                |
-| `GITHUB_CLIENT_ID`     | _(none)_                                | GitHub OAuth app client ID (enables OAuth)        |
-| `GITHUB_CLIENT_SECRET` | _(none)_                                | GitHub OAuth app client secret                    |
-| `MCP_BASE_URL`         | _(none)_                                | Public URL of the server (e.g. `https://my.host`) |
+| `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db` | Path to the knowledge SQLite database             |
+| `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`    | Path to the agents SQLite database                |
+| `GABOS_BACKUP_DIR`            | _(none — backups disabled)_             | Absolute path to the backup folder                |
+| `GABOS_BACKUP_TIME`           | `02:00`                                 | Time of day to run the backup (24h, local time)   |
+| `GABOS_BACKUP_RETENTION_DAYS` | `30`                                    | Days to keep backups (0 = keep forever)           |
+| `GITHUB_CLIENT_ID`            | _(none)_                                | GitHub OAuth app client ID (enables OAuth)        |
+| `GITHUB_CLIENT_SECRET`        | _(none)_                                | GitHub OAuth app client secret                    |
+| `MCP_BASE_URL`                | _(none)_                                | Public URL of the server (e.g. `https://my.host`) |
 
 When all three `GITHUB_*`/`MCP_BASE_URL` variables are set, the server requires GitHub OAuth 2.1 authentication. When any are missing, the server runs without auth (suitable for local stdio usage).
+
+### Backups
+
+Set `GABOS_BACKUP_DIR` to enable daily backups. The server copies both databases once per day using SQLite's Online Backup API (safe against concurrent writes) and deletes files older than `GABOS_BACKUP_RETENTION_DAYS` days. If a backup already exists for the current day it is skipped. Mount a volume in Docker so backups survive container restarts:
+
+```yaml
+volumes:
+  - ./backups:/backups
+environment:
+  - GABOS_BACKUP_DIR=/backups
+```
+
+**Restore (manual):**
+
+1. Stop the server.
+2. Copy the backup file over the original database path, e.g. `cp backups/agents_2026-04-26.db ~/.local/share/gabos-mcp/agents.db`.
+3. Start the server.
+
+Backup files are plain SQLite databases and can be inspected with any SQLite client.
 
 ## Connect
 
