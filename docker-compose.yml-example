@@ -8,7 +8,7 @@ services:
       # MCP_HOST: 0.0.0.0
       # MCP_PORT: 8000
       GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/data/chm/admin.chm", "End User Manual": "/data/chm/user.chm"}, "another_app": {"Reference": "/data/chm/reference.chm"}}'
-      # GABOS_CHM_CACHE_DIR: /cache
+      GABOS_CHM_CACHE_DIR: /cache
       GABOS_KNOWLEDGE_DB: /data/knowledge.db
       GABOS_AGENTS_DB: /data/agents.db
       # GABOS_BACKUP_DIR: /backups
@@ -21,5 +21,6 @@ services:
     volumes:
       - /path/to/chm/files:/data/chm
       - /path/to/data:/data
+      - /path/to/cache:/cache
       - /path/to/backups:/backups
     restart: unless-stopped
