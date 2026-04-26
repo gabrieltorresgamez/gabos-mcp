@@ -21,6 +21,7 @@ class TestAdd:
 		assert entry["title"] == "My Note"
 		assert entry["content"] == "Hello world"
 		assert entry["tags"] == []
+		assert entry["shared"] is False
 		assert entry["created_at"]
 		assert entry["updated_at"]
 
@@ -28,11 +29,16 @@ class TestAdd:
 		entry = await store.add(owner="alice", title="T", content="C", tags=["python", "tips"])
 		assert entry["tags"] == ["python", "tips"]
 
+	async def test_stores_shared_flag(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", shared=True)
+		assert entry["shared"] is True
+
 	async def test_persists_to_db(self, store):
 		entry = await store.add(owner="alice", title="T", content="C")
 		fetched = await store.get(entry["id"])
 		assert fetched is not None
 		assert fetched["title"] == "T"
+		assert fetched["shared"] is False
 
 
 @pytest.mark.asyncio
@@ -48,10 +54,23 @@ class TestGet:
 
 @pytest.mark.asyncio
 class TestList:
-	async def test_returns_all_entries(self, store):
+	async def test_returns_all_entries_without_caller(self, store):
 		await store.add(owner="alice", title="A", content="1")
 		await store.add(owner="bob", title="B", content="2")
 		assert len(await store.list_entries()) == 2
+
+	async def test_caller_sees_own_and_shared(self, store):
+		await store.add(owner="alice", title="alice-private", content="1", shared=False)
+		await store.add(owner="alice", title="alice-shared", content="2", shared=True)
+		await store.add(owner="bob", title="bob-private", content="3", shared=False)
+		await store.add(owner="bob", title="bob-shared", content="4", shared=True)
+
+		results = await store.list_entries(caller="alice")
+		titles = {e["title"] for e in results}
+		assert "alice-private" in titles
+		assert "alice-shared" in titles
+		assert "bob-shared" in titles
+		assert "bob-private" not in titles
 
 	async def test_filter_by_owner(self, store):
 		await store.add(owner="alice", title="A", content="1")
@@ -59,6 +78,15 @@ class TestList:
 		results = await store.list_entries(owner="alice")
 		assert len(results) == 1
 		assert results[0]["owner"] == "alice"
+
+	async def test_filter_by_owner_respects_visibility_for_caller(self, store):
+		await store.add(owner="alice", title="alice-private", content="1", shared=False)
+		await store.add(owner="alice", title="alice-shared", content="2", shared=True)
+		# bob asking for alice's entries: should only see shared ones
+		results = await store.list_entries(owner="alice", caller="bob")
+		titles = {e["title"] for e in results}
+		assert "alice-shared" in titles
+		assert "alice-private" not in titles
 
 	async def test_filter_by_tag(self, store):
 		await store.add(owner="alice", title="A", content="1", tags=["python"])
@@ -97,6 +125,11 @@ class TestUpdate:
 		entry = await store.add(owner="alice", title="T", content="C", tags=["a"])
 		updated = await store.update(id=entry["id"], owner="alice", tags=["b", "c"])
 		assert updated["tags"] == ["b", "c"]
+
+	async def test_updates_shared_flag(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", shared=False)
+		updated = await store.update(id=entry["id"], owner="alice", shared=True)
+		assert updated["shared"] is True
 
 	async def test_partial_update_preserves_other_fields(self, store):
 		entry = await store.add(owner="alice", title="T", content="C", tags=["x"])
@@ -152,6 +185,15 @@ class TestSearch:
 		results = await store.search("keyword", limit=2)
 		assert len(results) <= 2
 
+	async def test_caller_filters_visibility(self, store):
+		await store.add(owner="alice", title="alice-private", content="secret data", shared=False)
+		await store.add(owner="alice", title="alice-shared", content="shared data", shared=True)
+		# bob should see the shared entry but not the private one
+		results = await store.search("data", caller="bob")
+		titles = {r["title"] for r in results}
+		assert "alice-shared" in titles
+		assert "alice-private" not in titles
+
 
 @pytest.mark.asyncio
 class TestDelete:
@@ -168,3 +210,29 @@ class TestDelete:
 		entry = await store.add(owner="alice", title="T", content="C")
 		with pytest.raises(PermissionError, match="only delete your own"):
 			await store.delete(id=entry["id"], owner="bob")
+
+
+@pytest.mark.asyncio
+class TestDeleteUnchecked:
+	async def test_deletes_without_ownership_check(self, store):
+		entry = await store.add(owner="alice", title="T", content="C")
+		await store.delete_unchecked(entry["id"])
+		assert await store.get(entry["id"]) is None
+
+	async def test_raises_on_missing_entry(self, store):
+		with pytest.raises(KeyError, match="not found"):
+			await store.delete_unchecked("bad-id")
+
+
+@pytest.mark.asyncio
+class TestRemoveTags:
+	async def test_removes_specified_tags(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", tags=["agent:foo", "agent:bar", "other"])
+		updated = await store.remove_tags(entry["id"], ["agent:foo"])
+		assert "agent:foo" not in updated["tags"]
+		assert "agent:bar" in updated["tags"]
+		assert "other" in updated["tags"]
+
+	async def test_raises_on_missing_entry(self, store):
+		with pytest.raises(KeyError, match="not found"):
+			await store.remove_tags("bad-id", ["agent:foo"])

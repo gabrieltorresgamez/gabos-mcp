@@ -18,6 +18,12 @@ if TYPE_CHECKING:
 	from fastmcp import FastMCP
 
 
+def _check_agent_visible(agent, caller: str) -> None:
+	"""Raise PermissionError if the caller cannot see this agent."""
+	if agent.owner != caller and not agent.shared:
+		raise PermissionError(f"Agent '{agent.name}' not found or access denied.")
+
+
 def register(mcp: FastMCP) -> None:
 	"""Register agent tools on the given FastMCP instance."""
 	agent_store = get_agent_store()
@@ -43,6 +49,7 @@ def register(mcp: FastMCP) -> None:
 		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		auto_learn: bool = True,
+		shared: bool = False,
 	) -> str:
 		"""Create a new agent definition stored in the database.
 
@@ -53,6 +60,7 @@ def register(mcp: FastMCP) -> None:
 		    model: Claude model ID hint stored for reference (default: claude-haiku-4-5-20251001).
 		    knowledge_tags: Additional knowledge tags to auto-inject into context on each call.
 		    auto_learn: Whether the agent supports learning extraction via agent_extract_learnings.
+		    shared: Whether the agent is visible to all authenticated users (default: false).
 		"""
 		user = get_github_login()
 		if user == "anonymous":
@@ -66,25 +74,31 @@ def register(mcp: FastMCP) -> None:
 			model=model,
 			knowledge_tags=knowledge_tags,
 			auto_learn=auto_learn,
+			shared=shared,
 		)
 		return json.dumps(agent.to_dict(), indent=2)
 
 	@mcp.tool
 	async def agent_get(name_or_id: str) -> str:
 		"""Get a single agent definition by name or ID."""
+		user = get_github_login()
 		await agent_store.migrate()
 		agent = await agent_store.get(name_or_id)
 		if agent is None:
 			raise KeyError(f"Agent '{name_or_id}' not found.")
+		if user != "anonymous":
+			_check_agent_visible(agent, user)
 		return json.dumps(agent.to_dict(), indent=2)
 
 	@mcp.tool
 	async def agent_list() -> str:
-		"""List all available agents with their name, owner, and description."""
+		"""List agents visible to the current user (own agents and shared agents)."""
+		user = get_github_login()
 		await agent_store.migrate()
-		agents = await agent_store.list_agents()
+		caller = None if user == "anonymous" else user
+		agents = await agent_store.list_agents(caller=caller)
 		return json.dumps(
-			[{"name": a.name, "owner": a.owner, "description": a.description} for a in agents],
+			[{"name": a.name, "owner": a.owner, "shared": a.shared, "description": a.description} for a in agents],
 			indent=2,
 		)
 
@@ -96,8 +110,19 @@ def register(mcp: FastMCP) -> None:
 		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		auto_learn: bool | None = None,
+		shared: bool | None = None,
 	) -> str:
-		"""Update an agent definition. Only the owner can edit their own agents."""
+		"""Update an agent definition. Only the owner can edit their own agents.
+
+		Args:
+		    name_or_id: Agent name or ID.
+		    description: New description, or omit to keep existing.
+		    system_prompt: New system prompt, or omit to keep existing.
+		    model: New model ID, or omit to keep existing.
+		    knowledge_tags: New tag list, or omit to keep existing.
+		    auto_learn: New auto_learn flag, or omit to keep existing.
+		    shared: Set to true to make the agent visible to all users, false to make it private.
+		"""
 		user = get_github_login()
 		if user == "anonymous":
 			raise PermissionError("Authentication required to update agents.")
@@ -110,6 +135,7 @@ def register(mcp: FastMCP) -> None:
 			model=model,
 			knowledge_tags=knowledge_tags,
 			auto_learn=auto_learn,
+			shared=shared,
 		)
 		return json.dumps(agent.to_dict(), indent=2)
 
@@ -156,12 +182,20 @@ def register(mcp: FastMCP) -> None:
 		Returns:
 		    JSON with system_prompt, context_markdown, and stats.
 		"""
+		user = get_github_login()
 		await agent_store.migrate()
 		await knowledge_store.migrate()
+		agent_obj = await agent_store.get(agent)
+		if agent_obj is None:
+			raise KeyError(f"Agent '{agent}' not found.")
+		if user != "anonymous":
+			_check_agent_visible(agent_obj, user)
+		caller = None if user == "anonymous" else user
 		result = await assembler.assemble(
 			agent_name=agent,
 			query=query,
 			folder_context=folder_context,
+			caller=caller,
 		)
 		return json.dumps(result.to_dict(), indent=2)
 
@@ -173,6 +207,7 @@ def register(mcp: FastMCP) -> None:
 		title: str,
 		content: str,
 		tags: list[str] | None = None,
+		shared: bool = False,
 	) -> str:
 		"""Manually save a learning for an agent into the knowledge store.
 
@@ -182,14 +217,16 @@ def register(mcp: FastMCP) -> None:
 		the agent does NOT delete these knowledge entries. Use knowledge_delete to
 		remove individual entries when they are no longer needed.
 
-		Use this to directly record facts, field lists, API patterns, or anything
-		the agent should know.
+		When called by a non-owner on a shared agent, the knowledge entry is always
+		created as shared=True regardless of the shared parameter.
 
 		Args:
 		    agent: Agent name or ID.
 		    title: Short descriptive title.
 		    content: Markdown content.
 		    tags: Additional tags (e.g. "agent:omnitracker:folder:Tickets").
+		    shared: Whether the knowledge entry is visible to all users (default: false).
+		            Forced to true when a non-owner writes to a shared agent.
 		"""
 		user = get_github_login()
 		if user == "anonymous":
@@ -200,10 +237,20 @@ def register(mcp: FastMCP) -> None:
 		agent_obj = await agent_store.get(agent)
 		if agent_obj is None:
 			raise KeyError(f"Agent '{agent}' not found.")
+		_check_agent_visible(agent_obj, user)
+
+		# Non-owners writing to a shared agent must create shared knowledge.
+		effective_shared = True if agent_obj.owner != user else shared
 
 		auto_tag = f"agent:{agent_obj.name}"
 		all_tags = [auto_tag] + [t for t in (tags or []) if t != auto_tag]
-		entry = await knowledge_store.add(owner=user, title=title, content=content, tags=all_tags)
+		entry = await knowledge_store.add(
+			owner=user,
+			title=title,
+			content=content,
+			tags=all_tags,
+			shared=effective_shared,
+		)
 		return json.dumps(entry, indent=2)
 
 	@mcp.tool
@@ -237,6 +284,11 @@ def register(mcp: FastMCP) -> None:
 		await agent_store.migrate()
 		await knowledge_store.migrate()
 
+		agent_obj = await agent_store.get(agent)
+		if agent_obj is None:
+			raise KeyError(f"Agent '{agent}' not found.")
+		_check_agent_visible(agent_obj, user)
+
 		summary = await assembler.extract_learnings(
 			agent_name=agent,
 			query=query,
@@ -261,6 +313,8 @@ def register(mcp: FastMCP) -> None:
 	) -> str:
 		"""Manually link a CHM documentation page to an agent and context key.
 
+		The agent owner and any authenticated user (for shared agents) may add refs.
+
 		Args:
 		    agent: Agent name or ID.
 		    context_key: Folder or context name (e.g. "Tickets") or "_global".
@@ -280,7 +334,7 @@ def register(mcp: FastMCP) -> None:
 			source=source,
 			page_path=page_path,
 			relevance_note=relevance_note,
-			owner=user,
+			caller=user,
 		)
 		return json.dumps(ref.to_dict(), indent=2)
 
@@ -295,14 +349,23 @@ def register(mcp: FastMCP) -> None:
 		    agent: Agent name or ID.
 		    context_key: Filter to a specific context key (e.g. "Tickets"). Omit for all.
 		"""
+		user = get_github_login()
 		await agent_store.migrate()
+		agent_obj = await agent_store.get(agent)
+		if agent_obj is None:
+			raise KeyError(f"Agent '{agent}' not found.")
+		if user != "anonymous":
+			_check_agent_visible(agent_obj, user)
 		context_keys = [context_key] if context_key else None
 		refs = await agent_store.list_doc_refs(agent, context_keys=context_keys)
 		return json.dumps([r.to_dict() for r in refs], indent=2)
 
 	@mcp.tool
 	async def agent_doc_ref_delete(ref_id: str) -> str:
-		"""Delete a documentation reference by its ID. Only the owning agent's owner can delete.
+		"""Delete a documentation reference by its ID.
+
+		The agent owner can delete any ref. For shared agents, the ref's creator
+		can delete their own refs.
 
 		Use agent_doc_ref_list to find the ID of the ref to delete.
 		"""
@@ -310,5 +373,5 @@ def register(mcp: FastMCP) -> None:
 		if user == "anonymous":
 			raise PermissionError("Authentication required to delete doc refs.")
 		await agent_store.migrate()
-		await agent_store.delete_doc_ref(ref_id, owner=user)
+		await agent_store.delete_doc_ref(ref_id, caller=user)
 		return json.dumps({"deleted": ref_id})

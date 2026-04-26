@@ -119,6 +119,7 @@ class AgentAssembler:
 		agent_name: str,
 		query: str,
 		folder_context: str | None = None,
+		caller: str | None = None,
 	) -> AssembledContext:
 		"""Assemble the context a Claude session needs to answer a query as the agent.
 
@@ -131,6 +132,8 @@ class AgentAssembler:
 		    agent_name: Agent name or ID.
 		    query: The user's question — used to rank FTS knowledge hits.
 		    folder_context: Optional folder/domain context key (e.g. "Tickets").
+		    caller: GitHub login of the calling user, used to filter knowledge
+		            to entries visible to them (own + shared).
 
 		Returns:
 		    AssembledContext with system_prompt, context_markdown, and stats.
@@ -149,7 +152,7 @@ class AgentAssembler:
 		fts_tags = [f"agent:{agent.name}"] + agent.knowledge_tags
 		fts_results: list[dict] = []
 		for tag in fts_tags:
-			for hit in await self._knowledge.search(query, tag=tag, limit=10):
+			for hit in await self._knowledge.search(query, tag=tag, limit=10, caller=caller):
 				if not any(h["id"] == hit["id"] for h in fts_results):
 					fts_results.append(hit)
 		fts_results = fts_results[:10]
@@ -158,7 +161,7 @@ class AgentAssembler:
 		all_agent_tags = [f"agent:{agent.name}"] + agent.knowledge_tags
 		baseline: list[dict] = []
 		for tag in all_agent_tags:
-			for entry in await self._knowledge.list_entries(tag=tag, limit=30):
+			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller):
 				if not any(e["id"] == entry["id"] for e in baseline):
 					baseline.append(entry)
 
@@ -166,7 +169,7 @@ class AgentAssembler:
 		folder_results: list[dict] = []
 		if folder_context:
 			folder_tag = f"agent:{agent.name}:folder:{folder_context}"
-			folder_results = await self._knowledge.list_entries(tag=folder_tag, limit=20)
+			folder_results = await self._knowledge.list_entries(tag=folder_tag, limit=20, caller=caller)
 
 		# 4. Merge: FTS hits first (ranked), then baseline remainder, then folder entries
 		seen: set[str] = set()

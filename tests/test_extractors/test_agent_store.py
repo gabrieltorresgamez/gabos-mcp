@@ -26,6 +26,7 @@ class TestAgentCreate:
 		assert agent.model == AgentStore.DEFAULT_MODEL
 		assert agent.knowledge_tags == []
 		assert agent.auto_learn is True
+		assert agent.shared is False
 
 	async def test_creates_with_all_fields(self, store):
 		agent = await store.create(
@@ -36,10 +37,12 @@ class TestAgentCreate:
 			model="claude-sonnet-4-6",
 			knowledge_tags=["tag1", "tag2"],
 			auto_learn=False,
+			shared=True,
 		)
 		assert agent.model == "claude-sonnet-4-6"
 		assert agent.knowledge_tags == ["tag1", "tag2"]
 		assert agent.auto_learn is False
+		assert agent.shared is True
 
 	async def test_raises_on_duplicate_name(self, store):
 		await store.create(owner="alice", name="dup", description="D", system_prompt="P")
@@ -67,11 +70,24 @@ class TestAgentGet:
 
 @pytest.mark.asyncio
 class TestAgentList:
-	async def test_returns_all_agents(self, store):
+	async def test_returns_all_agents_without_caller(self, store):
 		await store.create(owner="alice", name="a", description="D", system_prompt="P")
 		await store.create(owner="bob", name="b", description="D", system_prompt="P")
 		agents = await store.list_agents()
 		assert len(agents) == 2
+
+	async def test_caller_sees_own_and_shared(self, store):
+		await store.create(owner="alice", name="alice-private", description="D", system_prompt="P", shared=False)
+		await store.create(owner="alice", name="alice-shared", description="D", system_prompt="P", shared=True)
+		await store.create(owner="bob", name="bob-private", description="D", system_prompt="P", shared=False)
+		await store.create(owner="bob", name="bob-shared", description="D", system_prompt="P", shared=True)
+
+		alice_view = await store.list_agents(caller="alice")
+		names = {a.name for a in alice_view}
+		assert "alice-private" in names
+		assert "alice-shared" in names
+		assert "bob-shared" in names
+		assert "bob-private" not in names
 
 	async def test_ordered_by_name(self, store):
 		await store.create(owner="alice", name="zebra", description="D", system_prompt="P")
@@ -91,6 +107,11 @@ class TestAgentUpdate:
 		updated = await store.update("ag", owner="alice", description="New")
 		assert updated.description == "New"
 		assert updated.system_prompt == "P"
+
+	async def test_owner_can_update_shared_flag(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
+		updated = await store.update("ag", owner="alice", shared=True)
+		assert updated.shared is True
 
 	async def test_non_owner_cannot_update(self, store):
 		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
@@ -145,10 +166,15 @@ class TestDocRefs:
 		assert len(refs) == 1
 		assert refs[0].id == ref.id
 
-	async def test_owner_enforced_on_add(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+	async def test_owner_enforced_on_add_private_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
 		with pytest.raises(PermissionError, match="only add doc refs"):
-			await store.add_doc_ref("ag", "_global", "APP", "src", "page", owner="bob")
+			await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+
+	async def test_non_owner_can_add_to_shared_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+		assert ref.created_by == "bob"
 
 	async def test_filter_by_context_keys(self, store):
 		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
@@ -168,18 +194,31 @@ class TestDocRefs:
 		with pytest.raises(ValueError, match="already exists"):
 			await store.add_doc_ref("ag", "_global", "APP", "src", "page")
 
-	async def test_delete_doc_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page")
-		await store.delete_doc_ref(ref.id, owner="alice")
+	async def test_agent_owner_can_delete_any_ref(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+		await store.delete_doc_ref(ref.id, caller="alice")
 		refs = await store.list_doc_refs("ag")
 		assert refs == []
 
-	async def test_non_owner_cannot_delete_doc_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+	async def test_creator_can_delete_own_ref_on_shared_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+		await store.delete_doc_ref(ref.id, caller="bob")
+		refs = await store.list_doc_refs("ag")
+		assert refs == []
+
+	async def test_non_creator_cannot_delete_ref_on_shared_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
+		with pytest.raises(PermissionError, match="only delete doc refs"):
+			await store.delete_doc_ref(ref.id, caller="charlie")
+
+	async def test_non_owner_cannot_delete_ref_on_private_agent(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
 		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page")
 		with pytest.raises(PermissionError, match="only delete doc refs"):
-			await store.delete_doc_ref(ref.id, owner="bob")
+			await store.delete_doc_ref(ref.id, caller="bob")
 
 	async def test_delete_doc_ref_raises_on_missing(self, store):
 		with pytest.raises(KeyError, match="not found"):
@@ -188,3 +227,9 @@ class TestDocRefs:
 	async def test_raises_on_unknown_agent(self, store):
 		with pytest.raises(KeyError, match="not found"):
 			await store.add_doc_ref("ghost", "_global", "APP", "src", "page")
+
+	async def test_created_by_stored(self, store):
+		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
+		refs = await store.list_doc_refs("ag")
+		assert refs[0].created_by == "alice"

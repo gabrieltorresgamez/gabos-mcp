@@ -18,8 +18,10 @@ def _now() -> str:
 class KnowledgeStore:
 	"""Persistent knowledge store backed by SQLite.
 
-	Any authenticated user can add entries and read all entries.
-	Only the owner of an entry can update or delete it.
+	Any authenticated user can add entries and read visible entries.
+	Visibility: owner sees their own entries; others see entries where shared=True.
+	Only the owner of an entry can update or delete it (with agent-owner exceptions
+	handled at the tool layer).
 	"""
 
 	def __init__(self, db_path: str) -> None:
@@ -34,6 +36,12 @@ class KnowledgeStore:
 			self._conn.row_factory = aiosqlite.Row
 		return self._conn
 
+	async def _column_exists(self, table: str, column: str) -> bool:
+		conn = await self._connect()
+		cursor = await conn.execute(f"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?", (column,))
+		row = await cursor.fetchone()
+		return bool(row and row[0] > 0)
+
 	async def migrate(self) -> None:
 		"""Create the necessary database tables if they do not exist."""
 		conn = await self._connect()
@@ -44,10 +52,13 @@ class KnowledgeStore:
 				title      TEXT NOT NULL,
 				content    TEXT NOT NULL,
 				tags       TEXT NOT NULL DEFAULT '[]',
+				shared     INTEGER NOT NULL DEFAULT 0,
 				created_at TEXT NOT NULL,
 				updated_at TEXT NOT NULL
 			)
 		""")
+		if not await self._column_exists("knowledge", "shared"):
+			await conn.execute("ALTER TABLE knowledge ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
 		await conn.execute("""
 			CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts
 			USING fts5(id UNINDEXED, title, content,
@@ -84,41 +95,65 @@ class KnowledgeStore:
 	def _row_to_dict(row: aiosqlite.Row) -> dict:
 		d = dict(row)
 		d["tags"] = json.loads(str(d["tags"]))
+		d["shared"] = bool(d.get("shared", 0))
 		return d
 
-	async def search(self, query: str, tag: str | None = None, limit: int = 10) -> list[dict]:
+	async def search(
+		self,
+		query: str,
+		tag: str | None = None,
+		limit: int = 10,
+		caller: str | None = None,
+	) -> list[dict]:
 		"""Full-text search over knowledge entries, ranked by relevance.
 
 		Args:
 		    query: Search terms (FTS5 trigram match).
 		    tag: Optional tag to restrict results to.
 		    limit: Maximum number of results.
+		    caller: If provided, restrict to entries visible to this user
+		            (own entries or shared entries).
 
 		Returns:
 		    List of entry dicts ordered by relevance (best first).
 		"""
 		fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
 		conn = await self._connect()
+
+		visibility_clause = ""
+		visibility_params: list[str] = []
+		if caller is not None:
+			visibility_clause = "AND (k.owner = ? OR k.shared = 1) "
+			visibility_params = [caller]
+
 		if tag:
 			cursor = await conn.execute(
 				"SELECT k.* FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
 				"WHERE knowledge_fts MATCH ? "
-				"AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
+				+ visibility_clause
+				+ "AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
 				"ORDER BY knowledge_fts.rank LIMIT ?",
-				(fts_query, tag, limit),
+				(fts_query, *visibility_params, tag, limit),
 			)
 		else:
 			cursor = await conn.execute(
 				"SELECT k.* FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
-				"WHERE knowledge_fts MATCH ? ORDER BY knowledge_fts.rank LIMIT ?",
-				(fts_query, limit),
+				"WHERE knowledge_fts MATCH ? " + visibility_clause + "ORDER BY knowledge_fts.rank LIMIT ?",
+				(fts_query, *visibility_params, limit),
 			)
 		rows = await cursor.fetchall()
 		return [self._row_to_dict(r) for r in rows]
 
-	async def add(self, owner: str, title: str, content: str, tags: list[str] | None = None) -> dict:
+	async def add(
+		self,
+		owner: str,
+		title: str,
+		content: str,
+		tags: list[str] | None = None,
+		shared: bool = False,
+	) -> dict:
 		"""Create a new knowledge entry.
 
 		Args:
@@ -126,6 +161,7 @@ class KnowledgeStore:
 		    title: Short title for the entry.
 		    content: Markdown content.
 		    tags: Optional list of tags.
+		    shared: Whether the entry is readable by all authenticated users.
 
 		Returns:
 		    The created entry as a dict.
@@ -135,9 +171,9 @@ class KnowledgeStore:
 		tags_list = tags or []
 		conn = await self._connect()
 		await conn.execute(
-			"INSERT INTO knowledge (id, owner, title, content, tags, created_at, updated_at) "
-			"VALUES (?, ?, ?, ?, ?, ?, ?)",
-			(entry_id, owner, title, content, json.dumps(tags_list), now, now),
+			"INSERT INTO knowledge (id, owner, title, content, tags, shared, created_at, updated_at) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			(entry_id, owner, title, content, json.dumps(tags_list), 1 if shared else 0, now, now),
 		)
 		await conn.commit()
 		return {
@@ -146,6 +182,7 @@ class KnowledgeStore:
 			"title": title,
 			"content": content,
 			"tags": tags_list,
+			"shared": shared,
 			"created_at": now,
 			"updated_at": now,
 		}
@@ -163,6 +200,7 @@ class KnowledgeStore:
 		tag: str | None = None,
 		limit: int = 50,
 		offset: int = 0,
+		caller: str | None = None,
 	) -> list[dict]:
 		"""List entries, optionally filtered by owner and/or tag.
 
@@ -171,6 +209,8 @@ class KnowledgeStore:
 		    tag: Filter to entries containing this tag.
 		    limit: Maximum number of results.
 		    offset: Number of entries to skip.
+		    caller: If provided, restrict results to entries visible to this user
+		            (own entries or entries where shared=True).
 
 		Returns:
 		    List of entry dicts ordered by updated_at descending.
@@ -178,17 +218,23 @@ class KnowledgeStore:
 		conn = await self._connect()
 		query = "SELECT DISTINCT knowledge.* FROM knowledge"
 		params: list[str | int] = []
+		where_parts: list[str] = []
+
+		if caller is not None:
+			where_parts.append("(knowledge.owner = ? OR knowledge.shared = 1)")
+			params.append(caller)
 
 		if tag:
-			query += ", json_each(knowledge.tags) WHERE json_each.value = ?"
+			query += ", json_each(knowledge.tags)"
+			where_parts.append("json_each.value = ?")
 			params.append(tag)
-			if owner:
-				query += " AND owner = ?"
-				params.append(owner)
-		else:
-			if owner:
-				query += " WHERE owner = ?"
-				params.append(owner)
+
+		if owner:
+			where_parts.append("knowledge.owner = ?")
+			params.append(owner)
+
+		if where_parts:
+			query += " WHERE " + " AND ".join(where_parts)
 
 		query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
 		params.extend([limit, offset])
@@ -205,6 +251,7 @@ class KnowledgeStore:
 		title: str | None = None,
 		content: str | None = None,
 		tags: list[str] | None = None,
+		shared: bool | None = None,
 	) -> dict:
 		"""Update an existing entry. Only the owner may update.
 
@@ -214,6 +261,7 @@ class KnowledgeStore:
 		    title: New title, or None to keep existing.
 		    content: New content, or None to keep existing.
 		    tags: New tags, or None to keep existing.
+		    shared: New shared flag, or None to keep existing.
 
 		Returns:
 		    The updated entry as a dict.
@@ -231,16 +279,24 @@ class KnowledgeStore:
 		new_title = title if title is not None else entry["title"]
 		new_content = content if content is not None else entry["content"]
 		new_tags = tags if tags is not None else entry["tags"]
+		new_shared = shared if shared is not None else entry["shared"]
 		now = _now()
 
 		conn = await self._connect()
 		await conn.execute(
-			"UPDATE knowledge SET title = ?, content = ?, tags = ?, updated_at = ? WHERE id = ?",
-			(new_title, new_content, json.dumps(new_tags), now, id),
+			"UPDATE knowledge SET title = ?, content = ?, tags = ?, shared = ?, updated_at = ? WHERE id = ?",
+			(new_title, new_content, json.dumps(new_tags), 1 if new_shared else 0, now, id),
 		)
 		await conn.commit()
 
-		return {**entry, "title": new_title, "content": new_content, "tags": new_tags, "updated_at": now}
+		return {
+			**entry,
+			"title": new_title,
+			"content": new_content,
+			"tags": new_tags,
+			"shared": new_shared,
+			"updated_at": now,
+		}
 
 	async def delete(self, id: str, owner: str) -> None:
 		"""Delete an entry. Only the owner may delete.
@@ -262,6 +318,50 @@ class KnowledgeStore:
 		conn = await self._connect()
 		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
 		await conn.commit()
+
+	async def delete_unchecked(self, id: str) -> None:
+		"""Delete an entry without an ownership check.
+
+		The caller is responsible for verifying authorization before calling this.
+
+		Raises:
+		    KeyError: If the entry does not exist.
+		"""
+		conn = await self._connect()
+		cursor = await conn.execute("SELECT id FROM knowledge WHERE id = ?", (id,))
+		if await cursor.fetchone() is None:
+			raise KeyError(f"Knowledge entry '{id}' not found.")
+		await conn.execute("DELETE FROM knowledge WHERE id = ?", (id,))
+		await conn.commit()
+
+	async def remove_tags(self, id: str, tags_to_remove: list[str]) -> dict:
+		"""Remove specific tags from an entry without an ownership check.
+
+		The caller is responsible for verifying authorization before calling this.
+
+		Args:
+		    id: Entry ID.
+		    tags_to_remove: Tags to remove from the entry.
+
+		Returns:
+		    The updated entry as a dict.
+
+		Raises:
+		    KeyError: If the entry does not exist.
+		"""
+		entry = await self.get(id)
+		if entry is None:
+			raise KeyError(f"Knowledge entry '{id}' not found.")
+		remove_set = set(tags_to_remove)
+		new_tags = [t for t in entry["tags"] if t not in remove_set]
+		now = _now()
+		conn = await self._connect()
+		await conn.execute(
+			"UPDATE knowledge SET tags = ?, updated_at = ? WHERE id = ?",
+			(json.dumps(new_tags), now, id),
+		)
+		await conn.commit()
+		return {**entry, "tags": new_tags, "updated_at": now}
 
 	async def close(self) -> None:
 		"""Close the database connection and release the background thread."""

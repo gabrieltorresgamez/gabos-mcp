@@ -27,6 +27,7 @@ class Agent:
 	model: str
 	knowledge_tags: list[str]
 	auto_learn: bool
+	shared: bool
 	created_at: str
 	updated_at: str
 
@@ -41,6 +42,7 @@ class Agent:
 			"model": self.model,
 			"knowledge_tags": self.knowledge_tags,
 			"auto_learn": self.auto_learn,
+			"shared": self.shared,
 			"created_at": self.created_at,
 			"updated_at": self.updated_at,
 		}
@@ -57,6 +59,7 @@ class DocRef:
 	source: str
 	page_path: str
 	relevance_note: str | None
+	created_by: str
 	created_at: str
 
 	def to_dict(self) -> dict:
@@ -69,6 +72,7 @@ class DocRef:
 			"source": self.source,
 			"page_path": self.page_path,
 			"relevance_note": self.relevance_note,
+			"created_by": self.created_by,
 			"created_at": self.created_at,
 		}
 
@@ -90,6 +94,12 @@ class AgentStore:
 			self._conn.row_factory = aiosqlite.Row
 		return self._conn
 
+	async def _column_exists(self, table: str, column: str) -> bool:
+		conn = await self._connect()
+		cursor = await conn.execute(f"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?", (column,))
+		row = await cursor.fetchone()
+		return bool(row and row[0] > 0)
+
 	async def migrate(self) -> None:
 		"""Create tables if they do not exist, and apply incremental schema changes."""
 		conn = await self._connect()
@@ -103,15 +113,15 @@ class AgentStore:
 				model         TEXT NOT NULL,
 				knowledge_tags TEXT NOT NULL DEFAULT '[]',
 				auto_learn    INTEGER NOT NULL DEFAULT 1,
+				shared        INTEGER NOT NULL DEFAULT 0,
 				created_at    TEXT NOT NULL,
 				updated_at    TEXT NOT NULL
 			)
 		""")
-		# Add owner column to existing databases that predate this field.
-		cursor = await conn.execute("SELECT COUNT(*) FROM pragma_table_info('agents') WHERE name = 'owner'")
-		row = await cursor.fetchone()
-		if row and row[0] == 0:
+		if not await self._column_exists("agents", "owner"):
 			await conn.execute("ALTER TABLE agents ADD COLUMN owner TEXT NOT NULL DEFAULT 'unknown'")
+		if not await self._column_exists("agents", "shared"):
+			await conn.execute("ALTER TABLE agents ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
 		await conn.execute("""
 			CREATE TABLE IF NOT EXISTS agent_doc_refs (
 				id             TEXT PRIMARY KEY,
@@ -121,10 +131,13 @@ class AgentStore:
 				source         TEXT NOT NULL,
 				page_path      TEXT NOT NULL,
 				relevance_note TEXT,
+				created_by     TEXT NOT NULL DEFAULT 'unknown',
 				created_at     TEXT NOT NULL,
 				UNIQUE(agent_id, context_key, app, source, page_path)
 			)
 		""")
+		if not await self._column_exists("agent_doc_refs", "created_by"):
+			await conn.execute("ALTER TABLE agent_doc_refs ADD COLUMN created_by TEXT NOT NULL DEFAULT 'unknown'")
 		await conn.commit()
 
 	@staticmethod
@@ -139,6 +152,7 @@ class AgentStore:
 			model=str(d["model"]),
 			knowledge_tags=json.loads(str(d["knowledge_tags"])),
 			auto_learn=bool(d["auto_learn"]),
+			shared=bool(d.get("shared", 0)),
 			created_at=str(d["created_at"]),
 			updated_at=str(d["updated_at"]),
 		)
@@ -155,6 +169,7 @@ class AgentStore:
 			source=str(d["source"]),
 			page_path=str(d["page_path"]),
 			relevance_note=str(raw_note) if raw_note is not None else None,
+			created_by=str(d.get("created_by") or "unknown"),
 			created_at=str(d["created_at"]),
 		)
 
@@ -169,6 +184,7 @@ class AgentStore:
 		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		auto_learn: bool = True,
+		shared: bool = False,
 	) -> Agent:
 		"""Create a new agent definition.
 
@@ -180,6 +196,7 @@ class AgentStore:
 		    model: Claude model ID. Defaults to claude-haiku-4-5-20251001.
 		    knowledge_tags: Tags used to filter knowledge entries into context.
 		    auto_learn: Whether to run the learning loop after each ask.
+		    shared: Whether the agent is visible to all authenticated users.
 
 		Returns:
 		    The created Agent.
@@ -193,8 +210,8 @@ class AgentStore:
 		try:
 			await conn.execute(
 				"INSERT INTO agents (id, name, owner, description, system_prompt, model, "
-				"knowledge_tags, auto_learn, created_at, updated_at) "
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"knowledge_tags, auto_learn, shared, created_at, updated_at) "
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				(
 					agent_id,
 					name,
@@ -204,6 +221,7 @@ class AgentStore:
 					model or self.DEFAULT_MODEL,
 					json.dumps(knowledge_tags or []),
 					1 if auto_learn else 0,
+					1 if shared else 0,
 					now,
 					now,
 				),
@@ -220,6 +238,7 @@ class AgentStore:
 			model=model or self.DEFAULT_MODEL,
 			knowledge_tags=knowledge_tags or [],
 			auto_learn=auto_learn,
+			shared=shared,
 			created_at=now,
 			updated_at=now,
 		)
@@ -234,10 +253,22 @@ class AgentStore:
 		row = await cursor.fetchone()
 		return self._row_to_agent(row) if row else None
 
-	async def list_agents(self) -> list[Agent]:
-		"""Return all agents ordered by name."""
+	async def list_agents(self, caller: str | None = None) -> list[Agent]:
+		"""Return agents visible to the caller, ordered by name.
+
+		Args:
+		    caller: GitHub login of the calling user. When provided, returns only
+		            agents owned by the caller or marked as shared. When None,
+		            returns all agents (for internal use).
+		"""
 		conn = await self._connect()
-		cursor = await conn.execute("SELECT * FROM agents ORDER BY name")
+		if caller is not None:
+			cursor = await conn.execute(
+				"SELECT * FROM agents WHERE owner = ? OR shared = 1 ORDER BY name",
+				(caller,),
+			)
+		else:
+			cursor = await conn.execute("SELECT * FROM agents ORDER BY name")
 		rows = await cursor.fetchall()
 		return [self._row_to_agent(r) for r in rows]
 
@@ -250,6 +281,7 @@ class AgentStore:
 		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		auto_learn: bool | None = None,
+		shared: bool | None = None,
 	) -> Agent:
 		"""Update an agent definition (partial update). Only the owner may update.
 
@@ -261,6 +293,7 @@ class AgentStore:
 		    model: New model ID, or None to keep existing.
 		    knowledge_tags: New tag list, or None to keep existing.
 		    auto_learn: New auto_learn flag, or None to keep existing.
+		    shared: New shared flag, or None to keep existing.
 
 		Returns:
 		    The updated Agent.
@@ -280,18 +313,20 @@ class AgentStore:
 		new_model = model if model is not None else agent.model
 		new_tags = knowledge_tags if knowledge_tags is not None else agent.knowledge_tags
 		new_auto_learn = auto_learn if auto_learn is not None else agent.auto_learn
+		new_shared = shared if shared is not None else agent.shared
 		now = _now()
 
 		conn = await self._connect()
 		await conn.execute(
 			"UPDATE agents SET description = ?, system_prompt = ?, model = ?, "
-			"knowledge_tags = ?, auto_learn = ?, updated_at = ? WHERE id = ?",
+			"knowledge_tags = ?, auto_learn = ?, shared = ?, updated_at = ? WHERE id = ?",
 			(
 				new_description,
 				new_system_prompt,
 				new_model,
 				json.dumps(new_tags),
 				1 if new_auto_learn else 0,
+				1 if new_shared else 0,
 				now,
 				agent.id,
 			),
@@ -306,6 +341,7 @@ class AgentStore:
 			model=new_model,
 			knowledge_tags=new_tags,
 			auto_learn=new_auto_learn,
+			shared=new_shared,
 			created_at=agent.created_at,
 			updated_at=now,
 		)
@@ -340,7 +376,7 @@ class AgentStore:
 		source: str,
 		page_path: str,
 		relevance_note: str | None = None,
-		owner: str | None = None,
+		caller: str | None = None,
 	) -> DocRef:
 		"""Link a CHM page to an agent + context key.
 
@@ -351,31 +387,33 @@ class AgentStore:
 		    source: CHM source name.
 		    page_path: Page path within the CHM source.
 		    relevance_note: Optional note on why this page is relevant.
-		    owner: If provided, must match the agent's owner (enforces permission).
+		    caller: GitHub login of the caller. For private agents, must match the
+		            agent's owner. For shared agents, any authenticated user is allowed.
 
 		Returns:
 		    The created DocRef.
 
 		Raises:
 		    KeyError: If the agent does not exist.
-		    PermissionError: If owner is provided and does not match the agent's owner.
+		    PermissionError: If caller is not allowed to add refs to this agent.
 		    ValueError: If the same ref already exists.
 		"""
 		agent = await self.get(agent_name_or_id)
 		if agent is None:
 			raise KeyError(f"Agent '{agent_name_or_id}' not found.")
-		if owner is not None and agent.owner != owner:
+		if caller is not None and agent.owner != caller and not agent.shared:
 			raise PermissionError("You can only add doc refs to your own agents.")
 
 		now = _now()
 		ref_id = str(uuid.uuid4())
+		created_by = caller or "unknown"
 		conn = await self._connect()
 		try:
 			await conn.execute(
 				"INSERT INTO agent_doc_refs "
-				"(id, agent_id, context_key, app, source, page_path, relevance_note, created_at) "
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-				(ref_id, agent.id, context_key, app, source, page_path, relevance_note, now),
+				"(id, agent_id, context_key, app, source, page_path, relevance_note, created_by, created_at) "
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				(ref_id, agent.id, context_key, app, source, page_path, relevance_note, created_by, now),
 			)
 		except aiosqlite.IntegrityError:
 			raise ValueError(f"Doc ref for '{app}/{source}/{page_path}' in context '{context_key}' already exists.")
@@ -388,6 +426,7 @@ class AgentStore:
 			source=source,
 			page_path=page_path,
 			relevance_note=relevance_note,
+			created_by=created_by,
 			created_at=now,
 		)
 
@@ -429,27 +468,37 @@ class AgentStore:
 		rows = await cursor.fetchall()
 		return [self._row_to_doc_ref(r) for r in rows]
 
-	async def delete_doc_ref(self, ref_id: str, owner: str | None = None) -> None:
+	async def delete_doc_ref(self, ref_id: str, caller: str | None = None) -> None:
 		"""Delete a doc ref by ID.
+
+		Permission rules:
+		- The agent's owner may delete any ref.
+		- For shared agents, the ref's creator (created_by) may delete their own ref.
+		- For private agents, only the agent owner may delete.
 
 		Args:
 		    ref_id: The UUID of the doc ref.
-		    owner: If provided, must match the owning agent's owner.
+		    caller: GitHub login of the calling user.
 
 		Raises:
 		    KeyError: If the ref does not exist.
-		    PermissionError: If owner is provided and does not match the agent's owner.
+		    PermissionError: If caller is not allowed to delete this ref.
 		"""
 		conn = await self._connect()
 		cursor = await conn.execute(
-			"SELECT dr.id, a.owner FROM agent_doc_refs dr JOIN agents a ON dr.agent_id = a.id WHERE dr.id = ?",
+			"SELECT dr.id, dr.created_by, a.owner, a.shared "
+			"FROM agent_doc_refs dr JOIN agents a ON dr.agent_id = a.id WHERE dr.id = ?",
 			(ref_id,),
 		)
 		row = await cursor.fetchone()
 		if row is None:
 			raise KeyError(f"Doc ref '{ref_id}' not found.")
-		if owner is not None and row[1] != owner:
-			raise PermissionError("You can only delete doc refs from your own agents.")
+		if caller is not None:
+			agent_owner = str(row["owner"])
+			ref_creator = str(row["created_by"])
+			is_shared = bool(row["shared"])
+			if caller != agent_owner and not (is_shared and caller == ref_creator):
+				raise PermissionError("You can only delete doc refs from your own agents.")
 		await conn.execute("DELETE FROM agent_doc_refs WHERE id = ?", (ref_id,))
 		await conn.commit()
 
