@@ -99,17 +99,11 @@ def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 		as your persona/instructions and context_markdown as the injected knowledge
 		when answering the query.
 
-		No external API calls are made — all data is read from the local database
-		and CHM file cache.
-
 		Args:
 		    agent: Agent name or ID (see agent_read for available agents).
 		    query: The question to be answered — used to rank knowledge hits via FTS.
 		    folder_context: Optional folder/domain key (e.g. OmniTracker folder name)
 		                    to inject folder-specific knowledge and doc refs.
-
-		Returns:
-		    JSON with system_prompt, context_markdown, and stats.
 		"""
 		user = get_github_login()
 		await agent_store.migrate()
@@ -139,15 +133,11 @@ def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 		folder_context: str | None = None,
 		ctx: Context | None = None,
 	) -> str:
-		"""Extract and persist learnings from a completed Q&A interaction.
+		"""Extract and persist learnings from a completed Q&A interaction. Owner-only.
 
-		Calls ctx.sample() to ask the active LLM session to extract reusable facts
-		from the provided Q&A pair, then saves them to the knowledge store and doc refs.
-		No external API key is required — uses the already-active client session.
-
-		Only the agent owner may extract learnings.
-
-		Call this after getting a good answer to preserve what was learned.
+		Calls ctx.sample() to extract reusable facts from the Q&A pair, then saves
+		them to the knowledge store and doc refs. Call this after a good answer to
+		preserve what was learned.
 
 		Args:
 		    agent: Agent name or ID.
@@ -200,30 +190,16 @@ def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 
 		Use mode="create" to define a new agent, mode="update" to modify an existing one.
 
-		mode="create":
-		  - name, description, and system_prompt are required.
-		  - name_or_id must be omitted.
-		  - model defaults to claude-haiku-4-5-20251001.
-		  - shared defaults to false (private to you).
+		mode="create": name, description, and system_prompt are required; name_or_id must
+		  be omitted; model defaults to claude-haiku-4-5-20251001; shared defaults to false.
 
-		mode="update":
-		  - name_or_id is required (agent name or UUID).
-		  - All other fields are partial overrides — omit any field to keep its current value.
-		  - Only the agent owner may update.
+		mode="update": name_or_id is required; all other fields are partial overrides
+		  (omit to keep current value); only the agent owner may update.
 
-		Both modes accept these optional fields:
-
-		doc_refs: list of CHM page links to add. Each entry must have:
-		  {context_key, app, source, page_path, relevance_note?}
-		  On update, entries are added if not already present; existing refs are not removed.
-		  To remove refs, use agent_delete with doc_ref_ids.
-
-		learnings: list of knowledge entries to write to the knowledge store, tagged
-		  automatically with agent:<name>. Each entry must have {title, content} and
-		  optionally {tags, shared}. The agent:<name> tag is prepended automatically.
-		  NOTE: learnings are stored in the shared knowledge store, not inside the agent
-		  record. Deleting the agent later does NOT delete these entries. Remove them
-		  explicitly with knowledge_delete if no longer needed.
+		doc_refs entries are added if not already present; existing refs are not removed
+		(use agent_delete with doc_ref_ids to remove). learnings are written to the
+		knowledge store tagged with agent:<name> — they are NOT deleted when the agent is
+		deleted; remove them with knowledge_delete if no longer needed.
 
 		Args:
 		    mode: "create" to add a new agent, "update" to modify an existing one.
@@ -235,8 +211,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 		    knowledge_tags: Extra knowledge tags to inject into context.
 		    auto_learn: Whether agent_extract_learnings is supported (default: true).
 		    shared: Whether agent is visible to all authenticated users (default: false).
-		    doc_refs: CHM page links to attach (see above).
-		    learnings: Knowledge entries to persist tagged to this agent (see above).
+		    doc_refs: CHM page links to attach — each entry: {context_key, app, source, page_path, relevance_note?}.
+		    learnings: Knowledge entries to persist — each entry: {title, content, tags?, shared?}.
 		"""
 		user = get_github_login()
 		if user == "anonymous":
