@@ -124,6 +124,14 @@ class TestKnowledgeRead:
 		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="bob"), pytest.raises(PermissionError):
 			await fns["knowledge_read"](id=entry["id"])
 
+	async def test_list_mode_omits_content(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="A", content="secret", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_read"]())
+		assert all("content" not in e for e in result)
+		assert all("title" in e for e in result)
+
 	async def test_filter_by_tag(self, tools):
 		fns, ks, as_ = tools
 		await ks.add(owner="alice", title="Python", content="1", tags=["python"], shared=True)

@@ -57,11 +57,11 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		Behaviour depends on which fields you provide:
 
-		- id provided → returns that single entry (full content). Requires visibility
+		- id provided → returns that single entry with full content. Requires visibility
 		  (own entry or shared=true).
 		- id omitted → lists entries visible to the current user (own entries and shared
-		  entries from others), optionally filtered by owner and/or tag, paginated via
-		  limit/offset.
+		  entries from others) with metadata only (id, title, tags, owner, updated_at —
+		  no content), optionally filtered by owner and/or tag, paginated via limit/offset.
 
 		Args:
 		    id: Entry ID. Provide to fetch a specific entry; omit to list.

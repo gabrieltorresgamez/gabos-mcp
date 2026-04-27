@@ -242,7 +242,12 @@ class KnowledgeStore:
 		cursor = await conn.execute(query, tuple(params))
 		rows = await cursor.fetchall()
 
-		return [self._row_to_dict(r) for r in rows]
+		results = []
+		for r in rows:
+			d = self._row_to_dict(r)
+			d.pop("content", None)
+			results.append(d)
+		return results
 
 	async def update(
 		self,
