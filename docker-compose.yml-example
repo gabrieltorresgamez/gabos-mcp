@@ -1,17 +1,19 @@
 services:
   gabos-mcp:
+    container_name: gabos-mcp
+    hostname: gabos-mcp
     build: .
     ports:
       - "8000:8000"
     environment:
-      # MCP_TRANSPORT: streamable-http
-      # MCP_HOST: 0.0.0.0
-      # MCP_PORT: 8000
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
       GABOS_CHM_FILES: '{"MyApp": {"Admin Manual": "/data/chm/admin.chm", "End User Manual": "/data/chm/user.chm"}, "another_app": {"Reference": "/data/chm/reference.chm"}}'
-      GABOS_CHM_CACHE_DIR: /cache
+      GABOS_CHM_CACHE_DIR: /data/chm-cache
       GABOS_KNOWLEDGE_DB: /data/knowledge.db
       GABOS_AGENTS_DB: /data/agents.db
-      # GABOS_BACKUP_DIR: /backups
+      # GABOS_BACKUP_DIR: /data/backups
       # GABOS_BACKUP_TIME: 02:00
       # GABOS_BACKUP_RETENTION_DAYS: 30
       # GITHUB_CLIENT_ID: Ov23li...
@@ -19,8 +21,5 @@ services:
       # MCP_BASE_URL: https://your-server.com
       # GITHUB_ALLOWED_USERS: user1,user2
     volumes:
-      - /path/to/chm/files:/data/chm
-      - /path/to/data:/data
-      - /path/to/cache:/cache
-      - /path/to/backups:/backups
+      - .data:/data
     restart: unless-stopped
