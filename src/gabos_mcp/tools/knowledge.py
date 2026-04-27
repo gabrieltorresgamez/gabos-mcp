@@ -166,24 +166,3 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		await store.delete(id=id, owner=user)
 		return json.dumps({"deleted": id})
 
-	@mcp.resource("knowledge://list")
-	async def knowledge_list_resource() -> str:
-		"""Knowledge entries visible to the current user (id, owner, title, tags, updated_at)."""
-		user = get_github_login()
-		caller = None if user == "anonymous" else user
-		await store.migrate()
-		entries = await store.list_entries(limit=1000, caller=caller)
-		summary = [{k: v for k, v in e.items() if k != "content"} for e in entries]
-		return json.dumps(summary, indent=2)
-
-	@mcp.resource("knowledge://{id}")
-	async def knowledge_entry(id: str) -> str:
-		"""Full content of a single knowledge entry."""
-		user = get_github_login()
-		await store.migrate()
-		entry = await store.get(id)
-		if entry is None:
-			raise KeyError(f"Knowledge entry '{id}' not found.")
-		if user != "anonymous" and entry["owner"] != user and not entry.get("shared"):
-			raise PermissionError(f"Knowledge entry '{id}' not found or access denied.")
-		return json.dumps(entry, indent=2)

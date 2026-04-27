@@ -55,11 +55,10 @@ src/gabos_mcp/
 │   ├── auth.py        # GitHub OAuth helpers
 │   ├── search.py      # SearchIndex (SQLite FTS5) — used by ChmExtractor
 │   └── stores.py      # get_knowledge_store() / get_agent_store() factory helpers
-├── resources/         # @mcp.resource functions (read-only data via URIs) — added as needed
 └── prompts/           # @mcp.prompt templates — added as needed
 ```
 
-**Key design principle:** Tools, resources, and prompts are thin glue — they validate input, call an extractor, and return results. The heavy logic lives in `extractors/`, which has no MCP dependency and is independently testable. Shared logic that multiple extractors need lives in `utils/`.
+**Key design principle:** Tools and prompts are thin glue — they validate input, call an extractor, and return results. The heavy logic lives in `extractors/`, which has no MCP dependency and is independently testable. Shared logic that multiple extractors need lives in `utils/`.
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function that registers its tools on the given instance. `server.py` imports the module and calls `register(mcp)`. This avoids circular imports and works correctly with the FastMCP dev inspector.
 
