@@ -90,6 +90,7 @@ ignore = [
     "ERA001",   # numbered section comments (# 1. ...) falsely flagged as commented-out code
     "ASYNC240", # asyncio project; trio/anyio.path recommendation irrelevant
     "A002",     # `id` and similar arg names shadowing builtins is idiomatic Python
+    "TC002",    # pydantic evaluates tool type hints at runtime; TYPE_CHECKING imports break FastMCP tools
 ]
 
 [tool.ruff.lint.per-file-ignores]

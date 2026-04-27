@@ -7,6 +7,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Literal
 
+from fastmcp.server.context import Context
 from platformdirs import user_cache_path
 
 from gabos_mcp.extractors.agent_assembler import AgentAssembler
@@ -16,7 +17,6 @@ from gabos_mcp.utils.stores import get_agent_store, get_knowledge_store
 
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
-	from fastmcp.server.context import Context
 
 logger = logging.getLogger(__name__)
 
