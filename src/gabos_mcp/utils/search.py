@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _DB_FILE = "index.db"
 _TABLE = "docs"
+_BATCH_SIZE = 1000
 
 
 class SearchIndex:
@@ -62,21 +63,21 @@ class SearchIndex:
 			batch = []
 			for path, title, content in documents:
 				batch.append((path, title, content))
-				if len(batch) >= 1000:
+				if len(batch) >= _BATCH_SIZE:
 					try:
 						await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-					except Exception:
+					except Exception:  # noqa: BLE001
 						logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
 					batch.clear()
 
 			if batch:
 				try:
 					await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-				except Exception:
+				except Exception:  # noqa: BLE001
 					logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
 
 			await con.commit()
-		except Exception:
+		except Exception:  # noqa: BLE001
 			logger.warning("Failed to build index", exc_info=True)
 
 		self._marker.touch()
@@ -104,7 +105,7 @@ class SearchIndex:
 				(query, limit),
 			)
 			rows = await cursor.fetchall()
-		except Exception:
+		except Exception:  # noqa: BLE001
 			logger.warning("Failed to parse query: %s", query)
 			return []
 

@@ -29,7 +29,7 @@ def backup_database(source_path: str, dest_path: str) -> None:
 
 
 def _seconds_until(target: time) -> float:
-	now = datetime.now()
+	now = datetime.now()  # noqa: DTZ005
 	run_at = datetime.combine(now.date(), target)
 	if run_at <= now:
 		run_at += timedelta(days=1)
@@ -42,7 +42,7 @@ def _parse_backup_time() -> time:
 		h, m = raw.split(":")
 		return time(int(h), int(m))
 	except ValueError, AttributeError:
-		logger.error("Invalid GABOS_BACKUP_TIME %r, defaulting to 02:00", raw)
+		logger.exception("Invalid GABOS_BACKUP_TIME %r, defaulting to 02:00", raw)
 		return time(2, 0)
 
 
@@ -54,12 +54,12 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 	retention = _retention_days()
 	if retention == 0:
 		return
-	cutoff = date.today() - timedelta(days=retention)
+	cutoff = date.today() - timedelta(days=retention)  # noqa: DTZ011
 	for pattern in ("agents_*.db", "knowledge_*.db"):
 		for f in backup_dir.glob(pattern):
 			try:
 				date_part = f.stem.split("_", 1)[1]
-				file_date = datetime.strptime(date_part, "%Y-%m-%d").date()
+				file_date = datetime.strptime(date_part, "%Y-%m-%d").date()  # noqa: DTZ007
 			except IndexError, ValueError:
 				continue
 			if file_date < cutoff:
@@ -69,7 +69,7 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 
 async def run_backup(backup_dir: Path) -> bool:
 	"""Back up both databases into backup_dir. Returns True if all succeeded."""
-	today = date.today().strftime("%Y-%m-%d")
+	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
 	dbs = [
 		("agents", _db_path("GABOS_AGENTS_DB", "agents.db")),
 		("knowledge", _db_path("GABOS_KNOWLEDGE_DB", "knowledge.db")),
@@ -113,7 +113,7 @@ async def backup_scheduler() -> None:
 	logger.info("Backup scheduler active: %s at %s, retention %d days", backup_dir, backup_time, _retention_days())
 
 	# Run immediately on startup if today's backup is missing for either DB.
-	today = date.today().strftime("%Y-%m-%d")
+	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
 	missing = not (backup_dir / f"agents_{today}.db").exists() or not (backup_dir / f"knowledge_{today}.db").exists()
 	if missing:
 		ok = await run_backup(backup_dir)

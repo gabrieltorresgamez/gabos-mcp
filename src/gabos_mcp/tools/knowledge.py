@@ -12,10 +12,12 @@ from gabos_mcp.utils.stores import get_agent_store, get_knowledge_store
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
 
+	from gabos_mcp.extractors.agent_store import AgentStore
+
 _AGENT_TAG_RE = re.compile(r"^agent:([^:]+)")
 
 
-async def _assert_agent_tags_owned(caller: str, tags: list[str], agent_store) -> None:
+async def _assert_agent_tags_owned(caller: str, tags: list[str], agent_store: AgentStore) -> None:
 	"""Raise PermissionError if caller uses agent: tags without owning those agents.
 
 	Resolves all referenced agent names in a single query for efficiency.
@@ -38,7 +40,7 @@ async def _assert_agent_tags_owned(caller: str, tags: list[str], agent_store) ->
 			)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP) -> None:  # noqa: C901
 	"""Register knowledge tools and resources on the given FastMCP instance."""
 	store = get_knowledge_store()
 	agent_store = get_agent_store()

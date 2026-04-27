@@ -226,8 +226,8 @@ class AgentStore:
 					now,
 				),
 			)
-		except aiosqlite.IntegrityError:
-			raise ValueError(f"Agent '{name}' already exists.")
+		except aiosqlite.IntegrityError as e:
+			raise ValueError(f"Agent '{name}' already exists.") from e
 		await conn.commit()
 		return Agent(
 			id=agent_id,
@@ -427,8 +427,10 @@ class AgentStore:
 				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				(ref_id, agent.id, context_key, app, source, page_path, relevance_note, created_by, now),
 			)
-		except aiosqlite.IntegrityError:
-			raise ValueError(f"Doc ref for '{app}/{source}/{page_path}' in context '{context_key}' already exists.")
+		except aiosqlite.IntegrityError as e:
+			raise ValueError(
+				f"Doc ref for '{app}/{source}/{page_path}' in context '{context_key}' already exists."
+			) from e
 		await conn.commit()
 		return DocRef(
 			id=ref_id,

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 	from fastmcp import FastMCP
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP) -> None:  # noqa: C901
 	"""Register docs tools on the given FastMCP instance."""
 	apps = json.loads(os.environ.get("GABOS_CHM_FILES", "{}"))
 	cache_dir = os.environ.get("GABOS_CHM_CACHE_DIR", str(user_cache_path("gabos-mcp") / "chm"))
@@ -37,7 +37,7 @@ def register(mcp: FastMCP) -> None:
 		return json.dumps(results, indent=2)
 
 	@mcp.tool
-	async def docs_read(
+	async def docs_read(  # noqa: PLR0911
 		app: str | None = None,
 		source: str | None = None,
 		page_path: str | None = None,

@@ -114,7 +114,7 @@ class AgentAssembler:
 		self._knowledge = knowledge_store
 		self._chm = chm_extractor
 
-	async def assemble(
+	async def assemble(  # noqa: C901, PLR0912
 		self,
 		agent_name: str,
 		query: str,
@@ -149,7 +149,7 @@ class AgentAssembler:
 		knowledge_count = 0
 
 		# 1. FTS-ranked hits (query-relevant entries come first)
-		fts_tags = [f"agent:{agent.name}"] + agent.knowledge_tags
+		fts_tags = [f"agent:{agent.name}", *agent.knowledge_tags]
 		fts_results: list[dict] = []
 		for tag in fts_tags:
 			for hit in await self._knowledge.search(query, tag=tag, limit=10, caller=caller):
@@ -158,7 +158,7 @@ class AgentAssembler:
 		fts_results = fts_results[:10]
 
 		# 2. All global agent knowledge (ensures nothing is missed when FTS has no hits)
-		all_agent_tags = [f"agent:{agent.name}"] + agent.knowledge_tags
+		all_agent_tags = [f"agent:{agent.name}", *agent.knowledge_tags]
 		baseline: list[dict] = []
 		for tag in all_agent_tags:
 			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller):
@@ -201,7 +201,7 @@ class AgentAssembler:
 					note = f" — {ref.relevance_note}" if ref.relevance_note else ""
 					doc_sections.append(f"### {ref.app}/{ref.source}/{ref.page_path}{note}\n\n{page_content}\n")
 					doc_page_count += 1
-				except Exception:
+				except Exception:  # noqa: BLE001
 					logger.warning("Failed to read CHM page %s/%s/%s", ref.app, ref.source, ref.page_path)
 			if doc_sections:
 				sections.append("## Documentation Pages\n")
@@ -217,7 +217,7 @@ class AgentAssembler:
 			doc_page_count=doc_page_count,
 		)
 
-	async def extract_learnings(
+	async def extract_learnings(  # noqa: C901
 		self,
 		agent_name: str,
 		query: str,
@@ -269,7 +269,7 @@ class AgentAssembler:
 				lines = text.splitlines()
 				text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
 			learnings = json.loads(text)
-		except Exception:
+		except Exception:  # noqa: BLE001
 			logger.warning("Learning extraction failed — skipping persistence.")
 			return LearningSummary(knowledge_saved=0, doc_refs_saved=0)
 
@@ -284,7 +284,7 @@ class AgentAssembler:
 					tags=tags,
 				)
 				knowledge_saved += 1
-			except Exception:
+			except Exception:  # noqa: BLE001
 				logger.warning("Failed to persist knowledge item: %s", item.get("title"))
 
 		doc_refs_saved = 0
@@ -305,7 +305,7 @@ class AgentAssembler:
 				doc_refs_saved += 1
 			except ValueError:
 				pass  # already exists — silently skip
-			except Exception:
+			except Exception:  # noqa: BLE001
 				logger.warning("Failed to persist doc ref: %s", item)
 
 		return LearningSummary(knowledge_saved=knowledge_saved, doc_refs_saved=doc_refs_saved)

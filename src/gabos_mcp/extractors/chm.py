@@ -1,11 +1,17 @@
 """CHM file extraction, conversion, and full-text search."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import shutil
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+	from collections.abc import Iterator
 
 import aiofiles
 import html2text
@@ -16,6 +22,7 @@ from gabos_mcp.utils.search import SearchIndex
 logger = logging.getLogger(__name__)
 
 _EMPTY_LINK_RE = re.compile(r"^\s*(\[]\([^)]*\)\s*)+$")
+_MAX_BLANK_LINES = 2
 
 
 def _clean_markdown(text: str) -> str:
@@ -35,7 +42,7 @@ def _clean_markdown(text: str) -> str:
 	for line in cleaned:
 		if line.strip() == "":
 			blank_count += 1
-			if blank_count <= 2:
+			if blank_count <= _MAX_BLANK_LINES:
 				result.append(line)
 		else:
 			blank_count = 0
@@ -50,7 +57,7 @@ class ChmExtractor:
 		self,
 		apps: dict[str, dict[str, str]],
 		cache_dir: str,
-	):
+	) -> None:
 		"""Initialize with app-grouped CHM file mappings.
 
 		Args:
@@ -140,7 +147,7 @@ class ChmExtractor:
 			stdout=asyncio.subprocess.PIPE,
 			stderr=asyncio.subprocess.PIPE,
 		)
-		stdout, stderr = await process.communicate()
+		_stdout, stderr = await process.communicate()
 		if process.returncode != 0:
 			raise RuntimeError(f"7z extraction failed: {stderr.decode()}")
 		marker.touch()
@@ -174,13 +181,13 @@ class ChmExtractor:
 				out_path = md_dir / rel_path
 				out_path.parent.mkdir(parents=True, exist_ok=True)
 				out_path.write_text(markdown, encoding="utf-8")
-			except Exception:
+			except Exception:  # noqa: BLE001
 				logger.warning("Failed to convert %s, skipping", html_file, exc_info=True)
 
 		marker.touch()
 
 	async def _build_index(self, md_dir: Path, index_dir: Path) -> None:
-		def documents():
+		def documents() -> Iterator[tuple[str, str, str]]:
 			for md_file in md_dir.rglob("*.md"):
 				try:
 					text = md_file.read_text(encoding="utf-8")
@@ -188,14 +195,14 @@ class ChmExtractor:
 
 					# Extract title from first non-empty line
 					title = rel_path
-					for line in text.splitlines():
-						line = line.strip()
-						if line:
-							title = line.lstrip("#").strip()
+					for raw_line in text.splitlines():
+						stripped = raw_line.strip()
+						if stripped:
+							title = stripped.lstrip("#").strip()
 							break
 
 					yield rel_path, title, text
-				except Exception:
+				except Exception:  # noqa: BLE001
 					logger.warning("Failed to read %s for indexing, skipping", md_file, exc_info=True)
 
 		await SearchIndex(index_dir).build(documents())
@@ -233,8 +240,7 @@ class ChmExtractor:
 			await self._ensure_ready(a, s)
 			index_dir = self._cache_path(a, s) / "index"
 			hits = await SearchIndex(index_dir).search(query, limit=limit)
-			for hit in hits:
-				results.append({"app": a, "source": s, **hit})
+			results.extend({"app": a, "source": s, **hit} for hit in hits)
 
 		results.sort(key=lambda r: r["score"], reverse=True)
 		return results[:limit]

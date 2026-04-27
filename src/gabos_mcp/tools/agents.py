@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import TYPE_CHECKING, Literal
 
-from fastmcp.server.context import Context  # noqa: TC002
 from platformdirs import user_cache_path
 
 from gabos_mcp.extractors.agent_assembler import AgentAssembler
@@ -16,9 +16,12 @@ from gabos_mcp.utils.stores import get_agent_store, get_knowledge_store
 
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
+	from fastmcp.server.context import Context
+
+logger = logging.getLogger(__name__)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 	"""Register agent tools on the given FastMCP instance."""
 	agent_store = get_agent_store()
 	knowledge_store = get_knowledge_store()
@@ -180,7 +183,7 @@ def register(mcp: FastMCP) -> None:
 	# ── Write ────────────────────────────────────────────────────────────────────
 
 	@mcp.tool
-	async def agent_write(
+	async def agent_write(  # noqa: C901, PLR0912
 		mode: Literal["create", "update"],
 		name_or_id: str | None = None,
 		name: str | None = None,
@@ -302,7 +305,7 @@ def register(mcp: FastMCP) -> None:
 		auto_tag = f"agent:{agent.name}"
 		for item in learnings or []:
 			extra_tags = [t for t in (item.get("tags") or []) if t != auto_tag]
-			all_tags = [auto_tag] + extra_tags
+			all_tags = [auto_tag, *extra_tags]
 			try:
 				await knowledge_store.add(
 					owner=user,
@@ -312,8 +315,8 @@ def register(mcp: FastMCP) -> None:
 					shared=item.get("shared", False),
 				)
 				learnings_saved.append(item["title"])
-			except Exception:
-				pass
+			except Exception:  # noqa: BLE001
+				logger.warning("Failed to save learning: %s", item.get("title"))
 
 		result = agent.to_dict()
 		if refs_added or refs_skipped:

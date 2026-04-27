@@ -16,7 +16,7 @@ def get_github_login() -> str:
 	return (token.claims.get("login") or "anonymous").lower()
 
 
-def build_github_auth():
+def build_github_auth():  # noqa: ANN201
 	"""Build OAuth auth provider if GitHub credentials are configured.
 
 	Returns None if any required env var (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
@@ -29,7 +29,7 @@ def build_github_auth():
 	if not (client_id and client_secret and base_url):
 		return None
 
-	from fastmcp.server.auth.providers.github import GitHubProvider, GitHubTokenVerifier
+	from fastmcp.server.auth.providers.github import GitHubProvider, GitHubTokenVerifier  # noqa: PLC0415
 
 	allowed_users_raw = os.getenv("GITHUB_ALLOWED_USERS", "")
 	allowed_users = {u.strip().lower() for u in allowed_users_raw.split(",") if u.strip()}
@@ -41,10 +41,10 @@ def build_github_auth():
 	)
 
 	if allowed_users:
-		original_verifier = provider._token_validator  # noqa: SLF001
+		original_verifier = provider._token_validator  # private FastMCP attr, no public accessor
 
 		class _AllowlistVerifier(GitHubTokenVerifier):
-			async def verify_token(self, token: str):
+			async def verify_token(self, token: str):  # noqa: ANN202
 				result = await original_verifier.verify_token(token)
 				if result is None:
 					return None
@@ -53,6 +53,6 @@ def build_github_auth():
 					return None
 				return result
 
-		provider._token_validator = _AllowlistVerifier()  # noqa: SLF001
+		provider._token_validator = _AllowlistVerifier()  # private FastMCP attr, no public accessor
 
 	return provider

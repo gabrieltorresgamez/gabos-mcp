@@ -5,7 +5,7 @@ import os
 from gabos_mcp.server import mcp
 
 
-def main():
+def main() -> None:
 	"""Run the MCP server."""
 	transport = os.getenv("MCP_TRANSPORT", "stdio")
 
