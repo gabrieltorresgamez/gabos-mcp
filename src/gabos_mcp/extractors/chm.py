@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import operator
 import re
 import shutil
 import sys
@@ -31,6 +32,9 @@ def _clean_markdown(text: str) -> str:
 	Strips:
 	- Navigation breadcrumb lines (starting with **Navigation:**)
 	- Lines consisting only of empty markdown links [](url) from image-only nav buttons
+
+	Returns:
+	    Cleaned markdown string with navigation artifacts removed.
 	"""
 	lines = text.splitlines()
 	cleaned = [
@@ -40,7 +44,7 @@ def _clean_markdown(text: str) -> str:
 	result: list[str] = []
 	blank_count = 0
 	for line in cleaned:
-		if line.strip() == "":
+		if not line.strip():
 			blank_count += 1
 			if blank_count <= _MAX_BLANK_LINES:
 				result.append(line)
@@ -72,7 +76,8 @@ class ChmExtractor:
 		self._locks: dict[str, asyncio.Lock] = {}
 		self._global_lock = asyncio.Lock()
 
-	def _cache_key(self, app: str, source: str) -> str:
+	@staticmethod
+	def _cache_key(app: str, source: str) -> str:
 		return f"{app}/{source}"
 
 	def _cache_path(self, app: str, source: str) -> Path:
@@ -115,7 +120,14 @@ class ChmExtractor:
 
 	@staticmethod
 	def _find_7z() -> str:
-		"""Find the 7z executable, checking common install locations on Windows."""
+		"""Find the 7z executable, checking common install locations on Windows.
+
+		Returns:
+		    Absolute path to the 7z executable.
+
+		Raises:
+		    RuntimeError: If 7z cannot be found on this platform.
+		"""
 		path = shutil.which("7z")
 		if path:
 			return path
@@ -152,7 +164,8 @@ class ChmExtractor:
 			raise RuntimeError(f"7z extraction failed: {stderr.decode()}")
 		marker.touch()
 
-	def _convert(self, html_dir: Path, md_dir: Path) -> None:
+	@staticmethod
+	def _convert(html_dir: Path, md_dir: Path) -> None:
 		marker = md_dir / ".converted"
 		if marker.exists():
 			return
@@ -181,12 +194,13 @@ class ChmExtractor:
 				out_path = md_dir / rel_path
 				out_path.parent.mkdir(parents=True, exist_ok=True)
 				out_path.write_text(markdown, encoding="utf-8")
-			except Exception:  # noqa: BLE001
+			except Exception:
 				logger.warning("Failed to convert %s, skipping", html_file, exc_info=True)
 
 		marker.touch()
 
-	async def _build_index(self, md_dir: Path, index_dir: Path) -> None:
+	@staticmethod
+	async def _build_index(md_dir: Path, index_dir: Path) -> None:
 		def documents() -> Iterator[tuple[str, str, str]]:
 			for md_file in md_dir.rglob("*.md"):
 				try:
@@ -202,7 +216,7 @@ class ChmExtractor:
 							break
 
 					yield rel_path, title, text
-				except Exception:  # noqa: BLE001
+				except Exception:
 					logger.warning("Failed to read %s for indexing, skipping", md_file, exc_info=True)
 
 		await SearchIndex(index_dir).build(documents())
@@ -220,6 +234,9 @@ class ChmExtractor:
 
 		Returns:
 		    List of dicts with keys: app, source, title, path, score.
+
+		Raises:
+		    ValueError: If source is specified without app.
 		"""
 		if source and not app:
 			raise ValueError("Cannot specify source without app.")
@@ -242,7 +259,7 @@ class ChmExtractor:
 			hits = await SearchIndex(index_dir).search(query, limit=limit)
 			results.extend({"app": a, "source": s, **hit} for hit in hits)
 
-		results.sort(key=lambda r: r["score"], reverse=True)
+		results.sort(key=operator.itemgetter("score"), reverse=True)
 		return results[:limit]
 
 	async def read_page(self, app: str, source: str, path: str) -> str:

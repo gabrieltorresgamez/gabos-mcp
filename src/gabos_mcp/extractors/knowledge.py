@@ -95,7 +95,7 @@ class KnowledgeStore:
 	def _row_to_dict(row: aiosqlite.Row) -> dict:
 		d = dict(row)
 		d["tags"] = json.loads(str(d["tags"]))
-		d["shared"] = bool(d.get("shared", 0))
+		d["shared"] = bool(d.get("shared"))
 		return d
 
 	async def search(

@@ -68,7 +68,11 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 
 
 async def run_backup(backup_dir: Path) -> bool:
-	"""Back up both databases into backup_dir. Returns True if all succeeded."""
+	"""Back up both databases into backup_dir.
+
+	Returns:
+	    True if all database backups succeeded, False if any failed.
+	"""
 	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
 	dbs = [
 		("agents", _db_path("GABOS_AGENTS_DB", "agents.db")),

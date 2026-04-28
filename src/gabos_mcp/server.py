@@ -44,6 +44,6 @@ knowledge.register(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])
-async def http_health(_request: Request) -> JSONResponse:
+async def http_health(_request: Request) -> JSONResponse:  # noqa: RUF029
 	"""Return server health status."""
 	return JSONResponse({"status": "ok"})

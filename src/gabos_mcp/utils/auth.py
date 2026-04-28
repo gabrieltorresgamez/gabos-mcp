@@ -1,6 +1,7 @@
 """GitHub OAuth utilities for FastMCP."""
 
 import os
+from typing import override
 
 from fastmcp.server.dependencies import get_access_token
 
@@ -19,8 +20,8 @@ def get_github_login() -> str:
 def build_github_auth():  # noqa: ANN201
 	"""Build OAuth auth provider if GitHub credentials are configured.
 
-	Returns None if any required env var (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
-	MCP_BASE_URL) is missing — the server then runs without authentication.
+	Returns:
+	    Configured GitHubProvider, or None if any required env var is missing.
 	"""
 	client_id = os.getenv("GITHUB_CLIENT_ID")
 	client_secret = os.getenv("GITHUB_CLIENT_SECRET")
@@ -44,6 +45,7 @@ def build_github_auth():  # noqa: ANN201
 		original_verifier = provider._token_validator  # private FastMCP attr, no public accessor
 
 		class _AllowlistVerifier(GitHubTokenVerifier):
+			@override
 			async def verify_token(self, token: str):  # noqa: ANN202
 				result = await original_verifier.verify_token(token)
 				if result is None:

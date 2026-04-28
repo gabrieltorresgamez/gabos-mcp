@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import operator
 from typing import TYPE_CHECKING
 
 import aiosqlite
@@ -66,18 +67,18 @@ class SearchIndex:
 				if len(batch) >= _BATCH_SIZE:
 					try:
 						await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-					except Exception:  # noqa: BLE001
+					except Exception:
 						logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
 					batch.clear()
 
 			if batch:
 				try:
 					await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-				except Exception:  # noqa: BLE001
+				except Exception:
 					logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
 
 			await con.commit()
-		except Exception:  # noqa: BLE001
+		except Exception:
 			logger.warning("Failed to build index", exc_info=True)
 
 		self._marker.touch()
@@ -118,7 +119,7 @@ class SearchIndex:
 			}
 			for path, title, score in rows
 		]
-		results.sort(key=lambda r: r["score"], reverse=True)
+		results.sort(key=operator.itemgetter("score"), reverse=True)
 
 		return results
 

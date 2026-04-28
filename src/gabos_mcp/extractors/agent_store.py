@@ -32,7 +32,11 @@ class Agent:
 	updated_at: str
 
 	def to_dict(self) -> dict:
-		"""Serialize to a plain dict (knowledge_tags as list, auto_learn as bool)."""
+		"""Serialize to a plain dict (knowledge_tags as list, auto_learn as bool).
+
+		Returns:
+		    Plain dict representation of this agent.
+		"""
 		return {
 			"id": self.id,
 			"name": self.name,
@@ -63,7 +67,11 @@ class DocRef:
 	created_at: str
 
 	def to_dict(self) -> dict:
-		"""Serialize to a plain dict."""
+		"""Serialize to a plain dict.
+
+		Returns:
+		    Plain dict representation of this doc ref.
+		"""
 		return {
 			"id": self.id,
 			"agent_id": self.agent_id,
@@ -152,7 +160,7 @@ class AgentStore:
 			model=str(d["model"]),
 			knowledge_tags=json.loads(str(d["knowledge_tags"])),
 			auto_learn=bool(d["auto_learn"]),
-			shared=bool(d.get("shared", 0)),
+			shared=bool(d.get("shared")),
 			created_at=str(d["created_at"]),
 			updated_at=str(d["updated_at"]),
 		)

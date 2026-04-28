@@ -6,7 +6,11 @@ from gabos_mcp.server import mcp
 
 
 def main() -> None:
-	"""Run the MCP server."""
+	"""Run the MCP server.
+
+	Raises:
+	    ValueError: If MCP_TRANSPORT is set to an unsupported value.
+	"""
 	transport = os.getenv("MCP_TRANSPORT", "stdio")
 
 	if transport == "stdio":

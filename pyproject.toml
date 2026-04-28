@@ -33,6 +33,7 @@ line-length = 120
 indent-style = "tab"
 
 [tool.ruff.lint]
+preview = true
 extend-select = [
     "W",     # pycodestyle warnings
     "I",     # import sorting
@@ -81,13 +82,11 @@ extend-select = [
 ignore = [
     "W191",     # tab indentation
     "D206",     # tab docstring indentation
-    "ANN401",   # allow typing.Any where intentional
-    "S101",     # allow assert in tests (see per-file-ignores)
     "COM812",   # conflicts with formatter
+    "ERA001",   # too many false positives on legitimate explanatory comments
     "TRY003",   # exception messages in separate variables adds boilerplate, no readability gain
     "EM101",    # same as TRY003
     "EM102",    # same as TRY003
-    "ERA001",   # numbered section comments (# 1. ...) falsely flagged as commented-out code
     "ASYNC240", # asyncio project; trio/anyio.path recommendation irrelevant
     "A002",     # `id` and similar arg names shadowing builtins is idiomatic Python
     "TC002",    # pydantic evaluates tool type hints at runtime; TYPE_CHECKING imports break FastMCP tools
@@ -104,8 +103,15 @@ ignore = [
     "T20",     # print is fine in tests
     "ERA001",  # commented-out tests are common
     "PLR2004", # magic values common in assertions
+    "PLR6301", # pytest class methods must be instance methods even without self
+    "PLC2701", # tests intentionally import private helpers to test them directly
+    "RUF029",  # async fixtures decorated with @pytest_asyncio.fixture need async even without await
     "RUF059",  # unpacked fixture vars often partially unused
     "DTZ",     # test time calculations use local time intentionally
+]
+"src/gabos_mcp/tools/**" = [
+    "DOC201",   # tool docstrings are user-facing descriptions shown to Claude; Returns sections add noise
+    "DOC501",   # same — Raises sections clutter the descriptions shown to clients
 ]
 "src/gabos_mcp/extractors/**" = [
     "S608", # SQL strings use internal constants + parameterized values; not user input
