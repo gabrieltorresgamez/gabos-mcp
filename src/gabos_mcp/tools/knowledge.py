@@ -165,4 +165,3 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		await store.migrate()
 		await store.delete(id=id, owner=user)
 		return json.dumps({"deleted": id})
-

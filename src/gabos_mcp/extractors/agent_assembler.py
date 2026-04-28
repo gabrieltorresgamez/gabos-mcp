@@ -161,7 +161,7 @@ class AgentAssembler:
 		all_agent_tags = [f"agent:{agent.name}", *agent.knowledge_tags]
 		baseline: list[dict] = []
 		for tag in all_agent_tags:
-			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller):
+			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller, include_content=True):
 				if not any(e["id"] == entry["id"] for e in baseline):
 					baseline.append(entry)
 
@@ -169,7 +169,9 @@ class AgentAssembler:
 		folder_results: list[dict] = []
 		if folder_context:
 			folder_tag = f"agent:{agent.name}:folder:{folder_context}"
-			folder_results = await self._knowledge.list_entries(tag=folder_tag, limit=20, caller=caller)
+			folder_results = await self._knowledge.list_entries(
+				tag=folder_tag, limit=20, caller=caller, include_content=True
+			)
 
 		# 4. Merge: FTS hits first (ranked), then baseline remainder, then folder entries
 		seen: set[str] = set()
