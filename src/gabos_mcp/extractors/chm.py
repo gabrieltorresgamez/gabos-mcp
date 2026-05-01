@@ -45,7 +45,7 @@ _LINK_RE = re.compile(
 _MS_ITS_RE = re.compile(r"ms-its:[^:]+::/?(.*)", re.IGNORECASE)
 
 # Unicode bullet characters used as plain-text list markers in CHM HTML
-_UNICODE_BULLET_RE = re.compile(r"^(\s*)[•·◦○●◉]\s+", re.MULTILINE)
+_UNICODE_BULLET_RE = re.compile(r"^(\s*)[•·◦○●◉]\s*", re.MULTILINE)
 
 
 def _is_external(url: str) -> bool:
