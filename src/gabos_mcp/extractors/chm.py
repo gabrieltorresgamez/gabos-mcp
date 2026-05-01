@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import operator
 import re
 import shutil
 import sys
+import urllib.parse
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,14 +19,121 @@ if TYPE_CHECKING:
 
 import aiofiles
 import html2text
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from gabos_mcp.utils.search import SearchIndex
+
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 logger = logging.getLogger(__name__)
 
 _EMPTY_LINK_RE = re.compile(r"^\s*(\[]\([^)]*\)\s*)+$")
 _MAX_BLANK_LINES = 2
+
+# Matches markdown links: [display](url) or [display](url "title")
+# Display text may contain one level of nested brackets (e.g. [[1]](url) footnotes).
+# URL may contain backslash-escaped parentheses.
+_LINK_RE = re.compile(
+	r"\[(\[?[^\]]*\]?)\]"
+	r"\(\s*"
+	r'((?:[^\s"\'()>\\]|\\.)+)'
+	r'(?:\s+"(?:[^"\\]|\\.)*"'
+	r"|\s+\'(?:[^\'\\]|\\.)*\')?"
+	r"\s*\)"
+)
+
+_MS_ITS_RE = re.compile(r"ms-its:[^:]+::/?(.*)", re.IGNORECASE)
+
+# Unicode bullet characters used as plain-text list markers in CHM HTML
+_UNICODE_BULLET_RE = re.compile(r"^(\s*)[•·◦○●◉]\s+", re.MULTILINE)
+
+
+def _is_external(url: str) -> bool:
+	return url.startswith(("http://", "https://", "mailto:", "ftp://"))
+
+
+def _fix_links(text: str) -> str:
+	"""Normalize internal CHM links in converted markdown.
+
+	- Decodes percent-encoded URLs (cp1252 aware, including %91-%94 curly quotes)
+	- Strips ms-its: cross-CHM prefixes
+	- Converts internal .htm/.html links to .md paths
+	- Removes empty-display links (nav image buttons)
+	- Leaves external links unchanged
+
+	Returns:
+	    Markdown string with normalized links.
+	"""
+
+	def replace(m: re.Match[str]) -> str:
+		display = m.group(1)
+		raw_url = m.group(2).strip()
+
+		# Remove backslash escapes that html2text introduces in URLs
+		raw_url = re.sub(r"\\(.)", r"\1", raw_url)
+
+		# Strip cp1252 curly-quote percent-encodings that wrap some URLs
+		raw_url = re.sub(r"^(%9[1234])+|(%9[1234])+$", "", raw_url, flags=re.IGNORECASE)
+
+		url = urllib.parse.unquote(raw_url, encoding="cp1252")
+
+		if _is_external(url):
+			return f"[{display}]({url})" if display else url
+
+		ms_its = _MS_ITS_RE.match(url)
+		if ms_its:
+			url = ms_its.group(1)
+
+		anchor = ""
+		if "#" in url:
+			url, anchor = url.split("#", 1)
+
+		if not url.lower().endswith((".htm", ".html")):
+			return m.group(0)
+
+		# Empty display = nav image button → remove entirely
+		if not display:
+			return ""
+
+		md_path = Path(url).with_suffix(".md")
+		anchor_suffix = f"#{anchor}" if anchor else ""
+		return f"[{display}]({md_path}{anchor_suffix})"
+
+	return _LINK_RE.sub(replace, text)
+
+
+def _canonical_key(path: Path) -> tuple[int, str]:
+	"""Sort key preferring the base name over numbered variants (e.g. foo.md before foo_10.md).
+
+	Returns:
+	    Tuple of (numeric suffix or 0, stem) for stable sorting.
+	"""
+	m = re.search(r"_(\d+)$", path.stem)
+	return (int(m.group(1)) if m else 0, path.stem)
+
+
+def _deduplicate(md_dir: Path) -> None:
+	"""Remove byte-identical markdown files, keeping one canonical copy per unique page.
+
+	CHM authoring tools generate one file per context-sensitive help ID, so many files
+	may have identical content. Deduplication prevents search index bloat.
+	"""
+	by_hash: dict[str, list[Path]] = {}
+	for md_file in md_dir.rglob("*.md"):
+		digest = hashlib.md5(md_file.read_bytes()).hexdigest()  # noqa: S324
+		by_hash.setdefault(digest, []).append(md_file)
+
+	removed = 0
+	for files in by_hash.values():
+		if len(files) < 2:  # noqa: PLR2004
+			continue
+		files.sort(key=_canonical_key)
+		for dup in files[1:]:
+			dup.unlink()
+			removed += 1
+
+	if removed:
+		logger.info("Removed %d duplicate files (identical content)", removed)
 
 
 def _clean_markdown(text: str) -> str:
@@ -51,7 +161,8 @@ def _clean_markdown(text: str) -> str:
 		else:
 			blank_count = 0
 			result.append(line)
-	return "\n".join(result).strip()
+	joined = "\n".join(result).strip()
+	return _UNICODE_BULLET_RE.sub(r"\1- ", joined)
 
 
 class ChmExtractor:
@@ -175,20 +286,21 @@ class ChmExtractor:
 		converter.body_width = 0
 		converter.ignore_images = True
 		converter.ignore_links = False
+		converter.ul_item_mark = "-"
 
 		html_files = list(html_dir.rglob("*.htm")) + list(html_dir.rglob("*.html"))
 		for html_file in html_files:
 			try:
-				raw_html = html_file.read_text(encoding="utf-8", errors="replace")
-				soup = BeautifulSoup(raw_html, "lxml")
+				# Read as bytes so lxml can detect charset from <meta charset> (handles cp1252 CHMs)
+				raw_bytes = html_file.read_bytes()
+				soup = BeautifulSoup(raw_bytes, "lxml")
 
-				# Strip common CHM navigation/chrome elements
 				for tag in soup.find_all(["script", "style", "nav", "header", "footer"]):
 					tag.decompose()
 
-				cleaned_html = str(soup)
-				markdown = converter.handle(cleaned_html)
+				markdown = converter.handle(str(soup))
 				markdown = _clean_markdown(markdown)
+				markdown = _fix_links(markdown)
 
 				rel_path = html_file.relative_to(html_dir).with_suffix(".md")
 				out_path = md_dir / rel_path
@@ -197,6 +309,7 @@ class ChmExtractor:
 			except Exception:
 				logger.warning("Failed to convert %s, skipping", html_file, exc_info=True)
 
+		_deduplicate(md_dir)
 		marker.touch()
 
 	@staticmethod
