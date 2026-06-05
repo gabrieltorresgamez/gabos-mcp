@@ -86,21 +86,24 @@ sequenceDiagram
     participant MCP
 
     You->>MCP: agent_context(agent, query, folder_context?)
-    MCP-->>You: system_prompt + context_markdown
+    MCP-->>You: system_prompt + knowledge_catalogue + context_markdown (CHM pages)
 
-    You->>Claude: Answer query using system_prompt + context_markdown
+    You->>MCP: knowledge_read(id=...) for each relevant catalogue entry
+    MCP-->>You: entry content
+
+    You->>Claude: Answer query using system_prompt + fetched knowledge
     Claude-->>You: answer
 
     You->>MCP: agent_extract_learnings(agent, query, answer)
     MCP-->>You: {knowledge_saved, doc_refs_saved}
 ```
 
-The MCP assembles context from the knowledge store and CHM docs — **you** do the answering using that context. `agent_extract_learnings` calls `ctx.sample()` on the already-active session to extract and persist reusable facts; no external API key is required.
+`agent_context` returns a **knowledge catalogue** — a JSON array of `{id, title, tags}` objects — rather than inlining all content. The agent inspects the catalogue and calls `knowledge_read` for the entries it actually needs, keeping the context window focused. CHM documentation pages linked to the agent are still inlined in `context_markdown` as before. `agent_extract_learnings` calls `ctx.sample()` on the already-active session to extract and persist reusable facts; no external API key is required.
 
 | Tool                      | Description                                                                                                                                  |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `agent_read`              | List all visible agents (no args), or fetch a specific agent by name/ID. Pass `include_doc_refs=true` to include linked CHM pages.           |
-| `agent_context`           | Assemble and return context (system prompt + knowledge + CHM pages) for a query.                                                             |
+| `agent_context`           | Assemble context for a query: returns system_prompt + knowledge_catalogue (JSON array of {id, title, tags}) + inlined CHM pages. Fetch entry content via `knowledge_read`. |
 | `agent_extract_learnings` | Extract and persist learnings from a completed Q&A via the active LLM session.                                                               |
 | `agent_write`             | Create (`mode="create"`) or update (`mode="update"`) an agent. Accepts optional `doc_refs` and `learnings` fields on both modes. Owner-only. |
 | `agent_delete`            | Delete an agent (no `doc_ref_ids`) or remove specific doc refs (`doc_ref_ids` provided). Owner-only.                                         |

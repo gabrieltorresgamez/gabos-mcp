@@ -71,7 +71,7 @@ Suffix convention: `_read`/`_search`/`_context` = read-only; `_write`/`_extract_
 | Tool                      | Side effect | Description                                                                                       |
 | ------------------------- | ----------- | ------------------------------------------------------------------------------------------------- |
 | `agent_read`              | read        | List visible agents or fetch one by name/ID (with optional doc refs)                              |
-| `agent_context`           | read        | Assemble system prompt + knowledge + CHM context for a query                                      |
+| `agent_context`           | read        | Assemble context for a query: system_prompt + knowledge_catalogue (JSON array of {id,title,tags}) + CHM pages; fetch content via knowledge_read |
 | `agent_extract_learnings` | write       | Extract and persist learnings from a Q&A via `ctx.sample()`                                       |
 | `agent_write`             | write       | Create or update an agent; accepts `doc_refs` and `learnings` fields                              |
 | `agent_delete`            | delete      | Delete an agent, or remove specific doc refs by ID                                                |
@@ -88,12 +88,13 @@ Agents are multipurpose domain experts stored in the database (`agents.db`). Eac
 - A list of knowledge tags to auto-inject as context
 - A model setting and `auto_learn` flag
 
-**No external API key required.** Agents do not call Claude themselves — `agent_context` assembles and returns the context (system prompt + relevant knowledge + CHM doc pages) for the active Claude session to use directly. Learning is opt-in via `agent_extract_learnings`, which calls `ctx.sample()` on the already-active session.
+**No external API key required.** Agents do not call Claude themselves — `agent_context` assembles and returns context for the active Claude session to use directly. Learning is opt-in via `agent_extract_learnings`, which calls `ctx.sample()` on the already-active session.
 
 **Workflow:**
-1. Call `agent_context(agent, query, folder_context?)` → get `system_prompt` + `context_markdown`
-2. Use `system_prompt` as persona and `context_markdown` as injected knowledge to answer the query
-3. Optionally call `agent_extract_learnings(agent, query, answer, referenced_chm_pages?)` to persist what was learned
+1. Call `agent_context(agent, query, folder_context?)` → get `system_prompt` + `knowledge_catalogue` + optional `context_markdown` (CHM pages)
+2. Call `knowledge_read(id=...)` for catalogue entries relevant to the query
+3. Answer using `system_prompt` as persona and the fetched knowledge content
+4. Optionally call `agent_extract_learnings(agent, query, answer, referenced_chm_pages?)` to persist what was learned
 
 **Permission model:** Owner-only writes and deletes. Reads open to all authenticated users; private items hidden from non-owners.
 

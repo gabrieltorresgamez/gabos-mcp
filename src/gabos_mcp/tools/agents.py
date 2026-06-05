@@ -94,16 +94,22 @@ def register(mcp: FastMCP) -> None:  # noqa: C901, PLR0915
 	) -> str:
 		"""Assemble and return the context for a domain agent query.
 
-		Returns the agent's system_prompt and a context_markdown block containing
-		relevant knowledge entries and CHM documentation pages. Use system_prompt
-		as your persona/instructions and context_markdown as the injected knowledge
-		when answering the query.
+		Workflow:
+		1. Call agent_context → inspect knowledge_catalogue.
+		2. Call knowledge_read for entries relevant to the query.
+		3. Answer using system_prompt as persona and the fetched content.
+		4. Optionally call agent_extract_learnings to persist what was learned.
 
 		Args:
 		    agent: Agent name or ID (see agent_read for available agents).
 		    query: The question to be answered — used to rank knowledge hits via FTS.
 		    folder_context: Optional folder/domain key (e.g. OmniTracker folder name)
 		                    to inject folder-specific knowledge and doc refs.
+
+		Returns:
+		    JSON with system_prompt, knowledge_catalogue (list of {id, title, tags} —
+		    content not included, fetch via knowledge_read), optional context_markdown
+		    (inlined CHM pages), and stats.
 		"""
 		user = get_github_login()
 		await agent_store.migrate()

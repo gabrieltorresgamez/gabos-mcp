@@ -60,9 +60,14 @@ class AssembledContext:
 	"""Result of context assembly for an agent query."""
 
 	system_prompt: str
+	knowledge_catalogue: list[dict]
 	context_markdown: str
-	knowledge_count: int
 	doc_page_count: int
+
+	@property
+	def knowledge_count(self) -> int:
+		"""Number of entries in the knowledge catalogue."""
+		return len(self.knowledge_catalogue)
 
 	def to_dict(self) -> dict:
 		"""Serialize to plain dict for JSON output.
@@ -70,14 +75,17 @@ class AssembledContext:
 		Returns:
 		    Plain dict representation of this assembled context.
 		"""
-		return {
+		result: dict = {
 			"system_prompt": self.system_prompt,
-			"context_markdown": self.context_markdown,
-			"stats": {
-				"knowledge_entries": self.knowledge_count,
-				"doc_pages": self.doc_page_count,
-			},
+			"knowledge_catalogue": self.knowledge_catalogue,
 		}
+		if self.context_markdown:
+			result["context_markdown"] = self.context_markdown
+		result["stats"] = {
+			"knowledge_entries": self.knowledge_count,
+			"doc_pages": self.doc_page_count,
+		}
+		return result
 
 
 @dataclass
@@ -142,23 +150,22 @@ class AgentAssembler:
 
 		baseline: list[dict] = []
 		for tag in tags:
-			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller, include_content=True):
+			for entry in await self._knowledge.list_entries(tag=tag, limit=30, caller=caller):
 				if not any(e["id"] == entry["id"] for e in baseline):
 					baseline.append(entry)
 
 		folder_results: list[dict] = []
 		if folder_context:
 			folder_tag = f"agent:{agent.name}:folder:{folder_context}"
-			folder_results = await self._knowledge.list_entries(
-				tag=folder_tag, limit=20, caller=caller, include_content=True
-			)
+			folder_results = await self._knowledge.list_entries(tag=folder_tag, limit=20, caller=caller)
 
 		seen: set[str] = set()
 		merged: list[dict] = []
 		for entry in fts_results + baseline + folder_results:
 			if entry["id"] not in seen:
 				seen.add(entry["id"])
-				merged.append(entry)
+				# Omit content — callers receive a manifest and fetch on demand via knowledge_read
+				merged.append({k: v for k, v in entry.items() if k != "content"})
 		return merged
 
 	async def _gather_doc_pages(self, agent_name: str, folder_context: str | None) -> tuple[list[str], int]:
@@ -189,11 +196,6 @@ class AgentAssembler:
 	) -> AssembledContext:
 		"""Assemble the context a Claude session needs to answer a query as the agent.
 
-		Retrieves:
-		1. FTS-ranked knowledge entries matching the query (global agent tags).
-		2. All folder-specific knowledge entries (when folder_context is given).
-		3. Content of CHM pages linked via agent_doc_refs for this context.
-
 		Args:
 		    agent_name: Agent name or ID.
 		    query: The user's question — used to rank FTS knowledge hits.
@@ -202,7 +204,10 @@ class AgentAssembler:
 		            to entries visible to them (own + shared).
 
 		Returns:
-		    AssembledContext with system_prompt, context_markdown, and stats.
+		    AssembledContext with system_prompt, knowledge_catalogue, context_markdown, and stats.
+		    knowledge_catalogue is a list of {id, title, tags} — content is not included,
+		    call knowledge_read(id=...) for entries you need. context_markdown contains
+		    inlined CHM documentation pages (omitted when empty).
 
 		Raises:
 		    KeyError: If the agent does not exist.
@@ -211,15 +216,10 @@ class AgentAssembler:
 		if agent is None:
 			raise KeyError(f"Agent '{agent_name}' not found.")
 
-		sections: list[str] = []
-
 		all_knowledge = await self._gather_knowledge_entries(agent, query, folder_context, caller)
-		if all_knowledge:
-			sections.append("## Knowledge Base\n")
-			for entry in all_knowledge:
-				tags_str = ", ".join(entry.get("tags", []))
-				sections.append(f"### {entry['title']}\n*tags: {tags_str}*\n\n{entry['content']}\n")
+		catalogue = [{"id": e["id"], "title": e["title"], "tags": e.get("tags", [])} for e in all_knowledge]
 
+		sections: list[str] = []
 		doc_sections, doc_page_count = await self._gather_doc_pages(agent.name, folder_context)
 		if doc_sections:
 			sections.append("## Documentation Pages\n")
@@ -230,8 +230,8 @@ class AgentAssembler:
 
 		return AssembledContext(
 			system_prompt=agent.system_prompt,
+			knowledge_catalogue=catalogue,
 			context_markdown="\n".join(sections),
-			knowledge_count=len(all_knowledge),
 			doc_page_count=doc_page_count,
 		)
 

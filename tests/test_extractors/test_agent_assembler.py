@@ -56,16 +56,28 @@ class TestAssemble:
 		assert result.system_prompt == "You are a test expert."
 
 	async def test_injects_global_agent_knowledge(self, agent_store, knowledge_store, agent):
+		entry = await knowledge_store.add(
+			owner="alice", title="Important fact", content="fact content", tags=["agent:test-agent"]
+		)
+		assembler = AgentAssembler(agent_store=agent_store, knowledge_store=knowledge_store)
+		result = await assembler.assemble("test-agent", "important fact query")
+		ids = [e["id"] for e in result.knowledge_catalogue]
+		titles = [e["title"] for e in result.knowledge_catalogue]
+		assert entry["id"] in ids
+		assert "Important fact" in titles
+		assert result.knowledge_count == 1
+
+	async def test_knowledge_content_not_in_catalogue(self, agent_store, knowledge_store, agent):
 		await knowledge_store.add(
 			owner="alice", title="Important fact", content="fact content", tags=["agent:test-agent"]
 		)
 		assembler = AgentAssembler(agent_store=agent_store, knowledge_store=knowledge_store)
 		result = await assembler.assemble("test-agent", "important fact query")
-		assert "Important fact" in result.context_markdown
-		assert result.knowledge_count == 1
+		for entry in result.knowledge_catalogue:
+			assert "content" not in entry
 
 	async def test_injects_folder_specific_knowledge(self, agent_store, knowledge_store, agent):
-		await knowledge_store.add(
+		entry = await knowledge_store.add(
 			owner="alice",
 			title="Folder field",
 			content="field content",
@@ -73,12 +85,14 @@ class TestAssemble:
 		)
 		assembler = AgentAssembler(agent_store=agent_store, knowledge_store=knowledge_store)
 		result = await assembler.assemble("test-agent", "anything", folder_context="Tickets")
-		assert "Folder field" in result.context_markdown
+		ids = [e["id"] for e in result.knowledge_catalogue]
+		assert entry["id"] in ids
 
 	async def test_empty_context_when_no_knowledge(self, agent_store, knowledge_store, agent):
 		assembler = AgentAssembler(agent_store=agent_store, knowledge_store=knowledge_store)
 		result = await assembler.assemble("test-agent", "query")
 		assert result.knowledge_count == 0
+		assert result.knowledge_catalogue == []
 		assert result.doc_page_count == 0
 
 	async def test_deduplicates_knowledge_entries(self, agent_store, knowledge_store, agent):
@@ -89,7 +103,7 @@ class TestAssemble:
 		assembler = AgentAssembler(agent_store=agent_store, knowledge_store=knowledge_store)
 		result = await assembler.assemble("test-agent", "shared fact query")
 		# Should appear exactly once despite matching two tags
-		assert result.context_markdown.count("Shared fact") == 1
+		assert sum(1 for e in result.knowledge_catalogue if e["title"] == "Shared fact") == 1
 
 
 @pytest.mark.asyncio
