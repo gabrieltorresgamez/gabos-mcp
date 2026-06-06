@@ -46,6 +46,49 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 	agent_store = get_agent_store()
 
 	@mcp.tool
+	async def knowledge_search(
+		query: str,
+		tag: str | None = None,
+		owner: str | None = None,
+		limit: int = 20,
+		offset: int = 0,
+	) -> str:
+		"""Full-text search over knowledge entries, ranked by relevance.
+
+		Returns metadata only (id, title, tags, owner, updated_at, score) — no
+		content. Follow up with knowledge_read(id=...) for entries worth reading.
+		The score is the FTS5 BM25 rank; lower (more negative) means a better match.
+
+		Visibility: caller sees own entries and entries where shared=true.
+
+		Args:
+		    query: Search terms (FTS5 trigram match).
+		    tag: Filter to entries containing this tag (e.g. "agent:myagent").
+		    owner: Filter to entries owned by this GitHub login.
+		    limit: Maximum results to return (default 20).
+		    offset: Entries to skip (default 0).
+		"""
+		user = get_github_login()
+		caller = None if user == "anonymous" else user
+		await store.migrate()
+
+		results = await store.search(query=query, tag=tag, owner=owner, limit=limit, offset=offset, caller=caller)
+		return json.dumps(
+			[
+				{
+					"id": r["id"],
+					"title": r["title"],
+					"tags": r["tags"],
+					"owner": r["owner"],
+					"updated_at": r["updated_at"],
+					"score": r.get("score"),
+				}
+				for r in results
+			],
+			indent=2,
+		)
+
+	@mcp.tool
 	async def knowledge_read(
 		id: str | None = None,
 		owner: str | None = None,

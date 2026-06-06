@@ -25,7 +25,6 @@ class TestAgentCreate:
 		assert agent.system_prompt == "You are helpful."
 		assert agent.model == AgentStore.DEFAULT_MODEL
 		assert agent.knowledge_tags == []
-		assert agent.auto_learn is True
 		assert agent.shared is False
 
 	async def test_creates_with_all_fields(self, store):
@@ -36,12 +35,10 @@ class TestAgentCreate:
 			system_prompt="Prompt",
 			model="claude-sonnet-4-6",
 			knowledge_tags=["tag1", "tag2"],
-			auto_learn=False,
 			shared=True,
 		)
 		assert agent.model == "claude-sonnet-4-6"
 		assert agent.knowledge_tags == ["tag1", "tag2"]
-		assert agent.auto_learn is False
 		assert agent.shared is True
 
 	async def test_raises_on_duplicate_name(self, store):
@@ -143,89 +140,6 @@ class TestAgentDelete:
 	async def test_raises_on_missing(self, store):
 		with pytest.raises(KeyError, match="not found"):
 			await store.delete("ghost", owner="alice")
-
-	async def test_cascades_to_doc_refs(self, store):
-		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await store.add_doc_ref(agent.name, "_global", "APP", "src", "path/page")
-		await store.delete("ag", owner="alice")
-		with pytest.raises(KeyError):
-			await store.list_doc_refs("ag")
-
-
-@pytest.mark.asyncio
-class TestDocRefs:
-	async def test_add_and_list(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "path/page", "Relevant because X")
-		assert ref.id
-		assert ref.context_key == "_global"
-		assert ref.app == "APP"
-		assert ref.relevance_note == "Relevant because X"
-
-		refs = await store.list_doc_refs("ag")
-		assert len(refs) == 1
-		assert refs[0].id == ref.id
-
-	async def test_owner_enforced_on_add_private_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
-		with pytest.raises(PermissionError, match="only add doc refs"):
-			await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
-
-	async def test_non_owner_cannot_add_to_shared_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		with pytest.raises(PermissionError, match="only add doc refs"):
-			await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="bob")
-
-	async def test_filter_by_context_keys(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await store.add_doc_ref("ag", "_global", "APP", "src", "global-page")
-		await store.add_doc_ref("ag", "Tickets", "APP", "src", "tickets-page")
-		await store.add_doc_ref("ag", "Changes", "APP", "src", "changes-page")
-
-		refs = await store.list_doc_refs("ag", context_keys=["_global", "Tickets"])
-		paths = {r.page_path for r in refs}
-		assert "global-page" in paths
-		assert "tickets-page" in paths
-		assert "changes-page" not in paths
-
-	async def test_raises_on_duplicate_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await store.add_doc_ref("ag", "_global", "APP", "src", "page")
-		with pytest.raises(ValueError, match="already exists"):
-			await store.add_doc_ref("ag", "_global", "APP", "src", "page")
-
-	async def test_agent_owner_can_delete_any_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
-		await store.delete_doc_ref(ref.id, caller="alice")
-		refs = await store.list_doc_refs("ag")
-		assert refs == []
-
-	async def test_non_owner_cannot_delete_ref(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page")
-		with pytest.raises(PermissionError, match="only delete doc refs"):
-			await store.delete_doc_ref(ref.id, caller="bob")
-
-	async def test_non_owner_cannot_delete_ref_on_shared_agent(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
-		ref = await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
-		with pytest.raises(PermissionError, match="only delete doc refs"):
-			await store.delete_doc_ref(ref.id, caller="bob")
-
-	async def test_delete_doc_ref_raises_on_missing(self, store):
-		with pytest.raises(KeyError, match="not found"):
-			await store.delete_doc_ref("bad-id")
-
-	async def test_raises_on_unknown_agent(self, store):
-		with pytest.raises(KeyError, match="not found"):
-			await store.add_doc_ref("ghost", "_global", "APP", "src", "page")
-
-	async def test_created_by_stored(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await store.add_doc_ref("ag", "_global", "APP", "src", "page", caller="alice")
-		refs = await store.list_doc_refs("ag")
-		assert refs[0].created_by == "alice"
 
 
 @pytest.mark.asyncio

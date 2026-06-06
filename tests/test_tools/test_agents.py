@@ -9,7 +9,6 @@ import pytest
 import pytest_asyncio
 
 from gabos_mcp.extractors.agent_store import AgentStore
-from gabos_mcp.extractors.chm import ChmExtractor
 from gabos_mcp.extractors.knowledge import KnowledgeStore
 from gabos_mcp.tools.agents import register
 
@@ -40,12 +39,9 @@ async def stores(tmp_path):
 @pytest_asyncio.fixture
 async def tools(stores, tmp_path):
 	as_, ks = stores
-	chm = ChmExtractor(apps={}, cache_dir=str(tmp_path / "chm"))
 	mcp = _make_mcp()
 	with (
 		patch("gabos_mcp.tools.agents.get_agent_store", return_value=as_),
-		patch("gabos_mcp.tools.agents.get_knowledge_store", return_value=ks),
-		patch("gabos_mcp.tools.agents.ChmExtractor", return_value=chm),
 	):
 		register(mcp)
 	return mcp.tools, as_, ks
@@ -83,27 +79,12 @@ class TestAgentRead:
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
 			await fns["agent_read"](name_or_id="private")
 
-	async def test_include_doc_refs(self, tools):
+	async def test_shared_agent_visible_to_non_owner(self, tools):
 		fns, as_, ks = tools
-		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await as_.add_doc_ref(agent.name, "_global", "APP", "src", "page.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_read"](name_or_id="ag", include_doc_refs=True))
-		assert "doc_refs" in result
-		assert len(result["doc_refs"]) == 1
-
-	async def test_doc_refs_filtered_by_context_key(self, tools):
-		fns, as_, ks = tools
-		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await as_.add_doc_ref(agent.name, "_global", "APP", "src", "global.md", caller="alice")
-		await as_.add_doc_ref(agent.name, "Tickets", "APP", "src", "tickets.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(
-				await fns["agent_read"](name_or_id="ag", include_doc_refs=True, doc_ref_context_key="Tickets")
-			)
-		paths = {r["page_path"] for r in result["doc_refs"]}
-		assert "tickets.md" in paths
-		assert "global.md" not in paths
+		await as_.create(owner="alice", name="shared", description="D", system_prompt="P", shared=True)
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"):
+			result = json.loads(await fns["agent_read"](name_or_id="shared"))
+		assert result["name"] == "shared"
 
 
 # ── agent_write ──────────────────────────────────────────────────────────────────
@@ -157,66 +138,11 @@ class TestAgentWrite:
 			result = json.loads(await fns["agent_write"](mode="update", description="X"))
 		assert "error" in result
 
-	async def test_create_with_doc_refs(self, tools):
+	async def test_result_has_no_auto_learn(self, tools):
 		fns, as_, ks = tools
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(
-				await fns["agent_write"](
-					mode="create",
-					name="ag",
-					description="D",
-					system_prompt="P",
-					doc_refs=[{"context_key": "_global", "app": "APP", "source": "src", "page_path": "page.md"}],
-				)
-			)
-		assert "doc_refs_added" in result
-		assert len(result["doc_refs_added"]) == 1
-
-	async def test_create_with_learnings(self, tools):
-		fns, as_, ks = tools
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(
-				await fns["agent_write"](
-					mode="create",
-					name="ag",
-					description="D",
-					system_prompt="P",
-					learnings=[{"title": "A fact", "content": "Fact content"}],
-				)
-			)
-		assert "learnings_saved" in result
-		entries = await ks.list_entries(tag="agent:ag")
-		assert len(entries) == 1
-		assert "agent:ag" in entries[0]["tags"]
-
-	async def test_update_doc_refs_additive(self, tools):
-		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await as_.add_doc_ref("ag", "_global", "APP", "src", "existing.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			await fns["agent_write"](
-				mode="update",
-				name_or_id="ag",
-				doc_refs=[{"context_key": "_global", "app": "APP", "source": "src", "page_path": "new.md"}],
-			)
-		refs = await as_.list_doc_refs("ag")
-		paths = {r.page_path for r in refs}
-		assert "existing.md" in paths
-		assert "new.md" in paths
-
-	async def test_duplicate_doc_refs_skipped(self, tools):
-		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await as_.add_doc_ref("ag", "_global", "APP", "src", "page.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(
-				await fns["agent_write"](
-					mode="update",
-					name_or_id="ag",
-					doc_refs=[{"context_key": "_global", "app": "APP", "source": "src", "page_path": "page.md"}],
-				)
-			)
-		assert "page.md" in str(result.get("doc_refs_skipped_duplicates", []))
+			result = json.loads(await fns["agent_write"](mode="create", name="ag", description="D", system_prompt="P"))
+		assert "auto_learn" not in result
 
 	async def test_anon_denied(self, tools):
 		fns, as_, ks = tools
@@ -242,28 +168,6 @@ class TestAgentDelete:
 		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
 			await fns["agent_delete"](name_or_id="ag")
-
-	async def test_delete_specific_doc_refs(self, tools):
-		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref1 = await as_.add_doc_ref("ag", "_global", "APP", "src", "p1.md", caller="alice")
-		ref2 = await as_.add_doc_ref("ag", "_global", "APP", "src", "p2.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_delete"](name_or_id="ag", doc_ref_ids=[ref1.id]))
-		assert ref1.id in result["deleted_doc_refs"]
-		# agent still exists
-		assert await as_.get("ag") is not None
-		# ref2 still present
-		refs = await as_.list_doc_refs("ag")
-		assert any(r.id == ref2.id for r in refs)
-
-	async def test_delete_doc_ref_non_owner_denied(self, tools):
-		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
-		ref = await as_.add_doc_ref("ag", "_global", "APP", "src", "p.md", caller="alice")
-		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"):
-			result = json.loads(await fns["agent_delete"](name_or_id="ag", doc_ref_ids=[ref.id]))
-		assert result.get("errors")
 
 	async def test_anon_denied(self, tools):
 		fns, as_, ks = tools

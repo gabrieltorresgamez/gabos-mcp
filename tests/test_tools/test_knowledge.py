@@ -94,6 +94,98 @@ class TestAssertAgentTagsOwned:
 			await _assert_agent_tags_owned("alice", ["agent:ghost"], as_)
 
 
+# ── knowledge_search ─────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+class TestKnowledgeSearch:
+	async def test_returns_ranked_results(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Python tips", content="Use list comprehensions", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="Python"))
+		assert len(result) == 1
+		assert result[0]["title"] == "Python tips"
+
+	async def test_returns_metadata_only_no_content(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Entry", content="secret content", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="Entry"))
+		assert len(result) == 1
+		hit = result[0]
+		assert "content" not in hit
+		assert "id" in hit
+		assert "title" in hit
+		assert "tags" in hit
+		assert "owner" in hit
+		assert "updated_at" in hit
+		assert "score" in hit
+
+	async def test_score_field_present(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="SQLite notes", content="FTS5 trigram search", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="FTS5"))
+		assert result[0]["score"] is not None
+
+	async def test_filter_by_tag(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Python guide", content="comprehensions", tags=["python"], shared=True)
+		await ks.add(owner="alice", title="Go guide", content="comprehensions", tags=["go"], shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="comprehensions", tag="python"))
+		assert len(result) == 1
+		assert result[0]["title"] == "Python guide"
+
+	async def test_filter_by_owner(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Alice tip", content="useful info", shared=True)
+		await ks.add(owner="bob", title="Bob tip", content="useful info", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="useful", owner="alice"))
+		assert all(r["owner"] == "alice" for r in result)
+		titles = {r["title"] for r in result}
+		assert "Alice tip" in titles
+		assert "Bob tip" not in titles
+
+	async def test_respects_visibility(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="alice-private", content="secret data", shared=False)
+		await ks.add(owner="alice", title="alice-shared", content="shared data", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="bob"):
+			result = json.loads(await fns["knowledge_search"](query="data"))
+		titles = {r["title"] for r in result}
+		assert "alice-shared" in titles
+		assert "alice-private" not in titles
+
+	async def test_agent_tag_filter(self, tools):
+		fns, ks, as_ = tools
+		await as_.create(owner="alice", name="myagent", description="D", system_prompt="P")
+		await ks.add(owner="alice", title="Agent fact", content="agent-specific info", tags=["agent:myagent"])
+		await ks.add(owner="alice", title="General tip", content="agent-specific info", tags=["tips"])
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="info", tag="agent:myagent"))
+		assert len(result) == 1
+		assert result[0]["title"] == "Agent fact"
+
+	async def test_pagination_via_limit(self, tools):
+		fns, ks, as_ = tools
+		for i in range(5):
+			await ks.add(owner="alice", title=f"Entry {i}", content="common keyword here", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](query="keyword", limit=2))
+		assert len(result) <= 2
+
+	async def test_empty_query_returns_results(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Something", content="here", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			# empty/no-match query should not crash
+			result = json.loads(await fns["knowledge_search"](query="xyzzy"))
+		assert result == []
+
+
 # ── knowledge_read ───────────────────────────────────────────────────────────────
 
 

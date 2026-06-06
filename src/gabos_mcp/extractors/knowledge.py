@@ -102,7 +102,9 @@ class KnowledgeStore:
 		self,
 		query: str,
 		tag: str | None = None,
+		owner: str | None = None,
 		limit: int = 10,
+		offset: int = 0,
 		caller: str | None = None,
 	) -> list[dict]:
 		"""Full-text search over knowledge entries, ranked by relevance.
@@ -110,12 +112,15 @@ class KnowledgeStore:
 		Args:
 		    query: Search terms (FTS5 trigram match).
 		    tag: Optional tag to restrict results to.
+		    owner: Optional owner login to restrict results to.
 		    limit: Maximum number of results.
+		    offset: Number of results to skip.
 		    caller: If provided, restrict to entries visible to this user
 		            (own entries or shared entries).
 
 		Returns:
-		    List of entry dicts ordered by relevance (best first).
+		    List of entry dicts ordered by relevance (best first), each including
+		    a ``score`` field (FTS5 BM25 rank; lower/more negative = better match).
 		"""
 		fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
 		conn = await self._connect()
@@ -126,22 +131,32 @@ class KnowledgeStore:
 			visibility_clause = "AND (k.owner = ? OR k.shared = 1) "
 			visibility_params = [caller]
 
+		owner_clause = ""
+		owner_params: list[str] = []
+		if owner is not None:
+			owner_clause = "AND k.owner = ? "
+			owner_params = [owner]
+
 		if tag:
 			cursor = await conn.execute(
-				"SELECT k.* FROM knowledge_fts "
+				"SELECT k.*, knowledge_fts.rank AS score FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
 				"WHERE knowledge_fts MATCH ? "
 				+ visibility_clause
+				+ owner_clause
 				+ "AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
-				"ORDER BY knowledge_fts.rank LIMIT ?",
-				(fts_query, *visibility_params, tag, limit),
+				"ORDER BY knowledge_fts.rank LIMIT ? OFFSET ?",
+				(fts_query, *visibility_params, *owner_params, tag, limit, offset),
 			)
 		else:
 			cursor = await conn.execute(
-				"SELECT k.* FROM knowledge_fts "
+				"SELECT k.*, knowledge_fts.rank AS score FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
-				"WHERE knowledge_fts MATCH ? " + visibility_clause + "ORDER BY knowledge_fts.rank LIMIT ?",
-				(fts_query, *visibility_params, limit),
+				"WHERE knowledge_fts MATCH ? "
+				+ visibility_clause
+				+ owner_clause
+				+ "ORDER BY knowledge_fts.rank LIMIT ? OFFSET ?",
+				(fts_query, *visibility_params, *owner_params, limit, offset),
 			)
 		rows = await cursor.fetchall()
 		return [self._row_to_dict(r) for r in rows]

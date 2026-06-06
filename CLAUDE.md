@@ -14,13 +14,15 @@ A personal MCP server built with FastMCP 3.x. New tools, resources, prompts, and
 
 ## Agents
 
-Agents do not call Claude themselves — `agent_context` assembles and returns context for the active session to use directly. Learning is opt-in via `agent_extract_learnings`, which calls `ctx.sample()` on the already-active session.
+Agents are domain expert personas stored in the database. Context assembly is fully manual — the model retrieves what it needs, rather than having context force-fed to it.
 
 **Workflow:**
-1. `agent_context(agent, query, folder_context?)` → `system_prompt` + `knowledge_catalogue` + optional `context_markdown`
-2. `knowledge_read(id=...)` for catalogue entries relevant to the query
-3. Answer using `system_prompt` as persona and fetched knowledge
-4. Optionally `agent_extract_learnings(agent, query, answer, referenced_chm_pages?)` to persist learnings
+1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
+2. `knowledge_search(query, tag="agent:<name>")` → ranked candidates (metadata + score only)
+3. `knowledge_read(id=...)` for entries worth reading
+4. `docs_search` / `docs_read` if CHM documentation is relevant
+5. Answer using `system_prompt` as persona
+6. `knowledge_write(tags=["agent:<name>"])` to persist new facts
 
 **Permission model:** Owner-only writes and deletes. Reads open to all authenticated users; private items hidden from non-owners.
 

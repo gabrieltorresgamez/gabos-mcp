@@ -57,15 +57,15 @@ Go to **Settings > Connectors > Add custom connector**, select "Streamable HTTP"
 
 Tools are named with a suffix that reflects their side-effect class, making per-tool allow-lists straightforward:
 
-| Suffix                         | Side effect              | Suggested Claude Desktop setting |
-| ------------------------------ | ------------------------ | -------------------------------- |
-| `_read`, `_search`, `_context` | Read-only                | **Always allow**                 |
-| `_write`, `_extract_learnings` | Creates or modifies data | **Allow once per session**       |
-| `_delete`                      | Irreversible deletion    | **Ask each time**                |
+| Suffix            | Side effect              | Suggested Claude Desktop setting |
+| ----------------- | ------------------------ | -------------------------------- |
+| `_read`, `_search` | Read-only               | **Always allow**                 |
+| `_write`          | Creates or modifies data | **Allow once per session**       |
+| `_delete`         | Irreversible deletion    | **Ask each time**                |
 
 ## Tools
 
-Tools are grouped by module and named `module_verb` or `module_verb_noun` so they sort alphabetically by domain.
+Tools are grouped by module and named `module_verb` so they sort alphabetically by domain. There are 9 tools total.
 
 ### Permission model
 
@@ -75,60 +75,45 @@ Tools are grouped by module and named `module_verb` or `module_verb_noun` so the
 
 ### Agents
 
-Agents are domain experts stored in the database. Each agent has a system prompt (persona), knowledge tags, and linked CHM documentation pages. They get smarter over time through use.
+Agents are domain expert personas stored in the database. Each agent has a system prompt and optional knowledge tags. Context assembly is fully manual — the model searches for what it needs rather than being force-fed.
 
-**Agent Q&A loop:**
+**Agent Q&A flow:**
 
-```mermaid
-sequenceDiagram
-    participant Claude
-    participant You
-    participant MCP
+1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
+2. `knowledge_search(query, tag="agent:<name>")` → ranked candidates (metadata + score only)
+3. `knowledge_read(id=...)` for entries worth reading
+4. `docs_search` / `docs_read` if CHM documentation is relevant
+5. Answer using `system_prompt` as persona
+6. `knowledge_write(tags=["agent:<name>"])` to persist new facts
 
-    You->>MCP: agent_context(agent, query, folder_context?)
-    MCP-->>You: system_prompt + knowledge_catalogue + context_markdown (CHM pages)
-
-    You->>MCP: knowledge_read(id=...) for each relevant catalogue entry
-    MCP-->>You: entry content
-
-    You->>Claude: Answer query using system_prompt + fetched knowledge
-    Claude-->>You: answer
-
-    You->>MCP: agent_extract_learnings(agent, query, answer)
-    MCP-->>You: {knowledge_saved, doc_refs_saved}
-```
-
-`agent_context` returns a **knowledge catalogue** — a JSON array of `{id, title, tags}` objects — rather than inlining all content. The agent inspects the catalogue and calls `knowledge_read` for the entries it actually needs, keeping the context window focused. CHM documentation pages linked to the agent are still inlined in `context_markdown` as before. `agent_extract_learnings` calls `ctx.sample()` on the already-active session to extract and persist reusable facts; no external API key is required.
-
-| Tool                      | Description                                                                                                                                  |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent_read`              | List all visible agents (no args), or fetch a specific agent by name/ID. Pass `include_doc_refs=true` to include linked CHM pages.           |
-| `agent_context`           | Assemble context for a query: returns system_prompt + knowledge_catalogue (JSON array of {id, title, tags}) + inlined CHM pages. Fetch entry content via `knowledge_read`. |
-| `agent_extract_learnings` | Extract and persist learnings from a completed Q&A via the active LLM session.                                                               |
-| `agent_write`             | Create (`mode="create"`) or update (`mode="update"`) an agent. Accepts optional `doc_refs` and `learnings` fields on both modes. Owner-only. |
-| `agent_delete`            | Delete an agent (no `doc_ref_ids`) or remove specific doc refs (`doc_ref_ids` provided). Owner-only.                                         |
+| Tool           | Description                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| `agent_read`   | List all visible agents (no args), or fetch a specific agent by name/ID (includes system_prompt, knowledge_tags). |
+| `agent_write`  | Create (`mode="create"`) or update (`mode="update"`) an agent definition. Owner-only.                      |
+| `agent_delete` | Delete an agent entirely. Owner-only. Knowledge entries tagged to the agent are **not** deleted.           |
 
 **agent_write modes:**
 
-- `mode="create"` — `name`, `description`, `system_prompt` required; `model`, `knowledge_tags`, `auto_learn`, `shared` optional.
+- `mode="create"` — `name`, `description`, `system_prompt` required; `model`, `knowledge_tags`, `shared` optional.
 - `mode="update"` — `name_or_id` required; all other fields are partial overrides.
-- `doc_refs` — list of `{context_key, app, source, page_path, relevance_note?}`. On update, additive: new entries are added, existing refs are left untouched.
-- `learnings` — list of `{title, content, tags?, shared?}`. Written to the knowledge store with `agent:<name>` prepended. **Not deleted when the agent is deleted** — remove explicitly via `knowledge_delete`.
 
 ### Knowledge
 
-A shared, tag-filtered knowledge store. Only the owner can edit or delete their entries.
+A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes part of that agent's context.
 
-| Tool               | Description                                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------------------- |
-| `knowledge_read`   | Fetch a single entry by `id`, or list entries filtered by `owner`/`tag` with pagination.       |
-| `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update. |
-| `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                          |
+| Tool               | Description                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `knowledge_search` | Full-text search over entries, ranked by relevance. Returns metadata + score only; fetch content via `knowledge_read`. |
+| `knowledge_read`   | Fetch a single entry by `id` (with content), or list entries filtered by `owner`/`tag` with pagination. |
+| `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.          |
+| `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                    |
 
 **knowledge_write modes:**
 
 - `mode="create"` — `title` and `content` required; `id` must be omitted; `tags`, `shared` optional.
 - `mode="update"` — `id` required; other fields are partial overrides.
+
+**knowledge_search** params: `query`, `tag?`, `owner?`, `limit?`, `offset?`. The `score` field is the FTS5 BM25 rank; lower (more negative) = better match. Visibility follows the same rules as `knowledge_read`.
 
 ### Docs (CHM)
 
