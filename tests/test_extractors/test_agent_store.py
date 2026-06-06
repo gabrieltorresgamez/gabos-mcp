@@ -23,7 +23,6 @@ class TestAgentCreate:
 		assert agent.name == "test"
 		assert agent.description == "A test agent"
 		assert agent.system_prompt == "You are helpful."
-		assert agent.model == AgentStore.DEFAULT_MODEL
 		assert agent.knowledge_tags == []
 		assert agent.shared is False
 
@@ -33,11 +32,9 @@ class TestAgentCreate:
 			name="full",
 			description="Full agent",
 			system_prompt="Prompt",
-			model="claude-sonnet-4-6",
 			knowledge_tags=["tag1", "tag2"],
 			shared=True,
 		)
-		assert agent.model == "claude-sonnet-4-6"
 		assert agent.knowledge_tags == ["tag1", "tag2"]
 		assert agent.shared is True
 

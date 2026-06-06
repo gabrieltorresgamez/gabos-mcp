@@ -24,7 +24,6 @@ class Agent:
 	owner: str
 	description: str
 	system_prompt: str
-	model: str
 	knowledge_tags: list[str]
 	shared: bool
 	created_at: str
@@ -42,7 +41,6 @@ class Agent:
 			"owner": self.owner,
 			"description": self.description,
 			"system_prompt": self.system_prompt,
-			"model": self.model,
 			"knowledge_tags": self.knowledge_tags,
 			"shared": self.shared,
 			"created_at": self.created_at,
@@ -52,8 +50,6 @@ class Agent:
 
 class AgentStore:
 	"""Persistent store for agent definitions."""
-
-	DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 	def __init__(self, db_path: str) -> None:
 		"""Initialize with the path to the SQLite database file (created if absent)."""
@@ -83,7 +79,6 @@ class AgentStore:
 				owner         TEXT NOT NULL DEFAULT 'unknown',
 				description   TEXT NOT NULL,
 				system_prompt TEXT NOT NULL,
-				model         TEXT NOT NULL,
 				knowledge_tags TEXT NOT NULL DEFAULT '[]',
 				shared        INTEGER NOT NULL DEFAULT 0,
 				created_at    TEXT NOT NULL,
@@ -94,6 +89,8 @@ class AgentStore:
 			await conn.execute("ALTER TABLE agents ADD COLUMN owner TEXT NOT NULL DEFAULT 'unknown'")
 		if not await self._column_exists("agents", "shared"):
 			await conn.execute("ALTER TABLE agents ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
+		if await self._column_exists("agents", "model"):
+			await conn.execute("ALTER TABLE agents DROP COLUMN model")
 		await conn.commit()
 
 	@staticmethod
@@ -105,7 +102,6 @@ class AgentStore:
 			owner=str(d.get("owner") or "unknown"),
 			description=str(d["description"]),
 			system_prompt=str(d["system_prompt"]),
-			model=str(d["model"]),
 			knowledge_tags=json.loads(str(d["knowledge_tags"])),
 			shared=bool(d.get("shared")),
 			created_at=str(d["created_at"]),
@@ -120,7 +116,6 @@ class AgentStore:
 		name: str,
 		description: str,
 		system_prompt: str,
-		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		shared: bool = False,
 	) -> Agent:
@@ -131,8 +126,7 @@ class AgentStore:
 		    name: Unique slug (e.g. "omnitracker").
 		    description: One-line description shown in agent_list.
 		    system_prompt: Full persona and instructions for the agent.
-		    model: Claude model ID. Defaults to claude-haiku-4-5-20251001.
-		    knowledge_tags: Tags used to filter knowledge entries into context.
+		    knowledge_tags: Tags to search when retrieving this agent's knowledge.
 		    shared: Whether the agent is visible to all authenticated users.
 
 		Returns:
@@ -146,16 +140,15 @@ class AgentStore:
 		conn = await self._connect()
 		try:
 			await conn.execute(
-				"INSERT INTO agents (id, name, owner, description, system_prompt, model, "
+				"INSERT INTO agents (id, name, owner, description, system_prompt, "
 				"knowledge_tags, shared, created_at, updated_at) "
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 				(
 					agent_id,
 					name,
 					owner,
 					description,
 					system_prompt,
-					model or self.DEFAULT_MODEL,
 					json.dumps(knowledge_tags or []),
 					1 if shared else 0,
 					now,
@@ -171,7 +164,6 @@ class AgentStore:
 			owner=owner,
 			description=description,
 			system_prompt=system_prompt,
-			model=model or self.DEFAULT_MODEL,
 			knowledge_tags=knowledge_tags or [],
 			shared=shared,
 			created_at=now,
@@ -213,7 +205,6 @@ class AgentStore:
 		owner: str,
 		description: str | None = None,
 		system_prompt: str | None = None,
-		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		shared: bool | None = None,
 	) -> Agent:
@@ -224,7 +215,6 @@ class AgentStore:
 		    owner: GitHub login of the caller (must match the agent's owner).
 		    description: New description, or None to keep existing.
 		    system_prompt: New system prompt, or None to keep existing.
-		    model: New model ID, or None to keep existing.
 		    knowledge_tags: New tag list, or None to keep existing.
 		    shared: New shared flag, or None to keep existing.
 
@@ -243,19 +233,17 @@ class AgentStore:
 
 		new_description = description if description is not None else agent.description
 		new_system_prompt = system_prompt if system_prompt is not None else agent.system_prompt
-		new_model = model if model is not None else agent.model
 		new_tags = knowledge_tags if knowledge_tags is not None else agent.knowledge_tags
 		new_shared = shared if shared is not None else agent.shared
 		now = _now()
 
 		conn = await self._connect()
 		await conn.execute(
-			"UPDATE agents SET description = ?, system_prompt = ?, model = ?, "
+			"UPDATE agents SET description = ?, system_prompt = ?, "
 			"knowledge_tags = ?, shared = ?, updated_at = ? WHERE id = ?",
 			(
 				new_description,
 				new_system_prompt,
-				new_model,
 				json.dumps(new_tags),
 				1 if new_shared else 0,
 				now,
@@ -269,7 +257,6 @@ class AgentStore:
 			owner=agent.owner,
 			description=new_description,
 			system_prompt=new_system_prompt,
-			model=new_model,
 			knowledge_tags=new_tags,
 			shared=new_shared,
 			created_at=agent.created_at,

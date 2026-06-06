@@ -36,7 +36,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		**Agent Q&A flow** (use after fetching a specific agent):
 		1. agent_read(name) → system_prompt, knowledge_tags
-		2. knowledge_search(query, tag="agent:<name>") → ranked candidates
+		2. For each tag in knowledge_tags (default ["agent:<name>"] when empty):
+		   knowledge_search(query, tag=tag) → merge results across all tags
 		3. knowledge_read(id=...) for entries worth reading
 		4. docs_search / docs_read if CHM documentation is relevant
 		5. Answer using system_prompt as persona
@@ -73,7 +74,6 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		name: str | None = None,
 		description: str | None = None,
 		system_prompt: str | None = None,
-		model: str | None = None,
 		knowledge_tags: list[str] | None = None,
 		shared: bool | None = None,
 	) -> str:
@@ -82,7 +82,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		Use mode="create" to define a new agent, mode="update" to modify an existing one.
 
 		mode="create": name, description, and system_prompt are required; name_or_id must
-		  be omitted; model defaults to claude-haiku-4-5-20251001; shared defaults to false.
+		  be omitted; shared defaults to false.
 
 		mode="update": name_or_id is required; all other fields are partial overrides
 		  (omit to keep current value); only the agent owner may update.
@@ -95,8 +95,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    name: Agent slug (e.g. "omnitracker"). Required for create.
 		    description: One-line description. Required for create.
 		    system_prompt: Full persona and instructions. Required for create.
-		    model: Claude model ID hint (default: claude-haiku-4-5-20251001).
-		    knowledge_tags: Extra knowledge tags to include in context queries.
+		    knowledge_tags: Tags to search when retrieving this agent's knowledge.
+		      Defaults to ["agent:<name>"] when empty, so the agent's own tag is
+		      always covered without having to set this explicitly.
 		    shared: Whether agent is visible to all authenticated users (default: false).
 		"""
 		user = get_github_login()
@@ -119,7 +120,6 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				name=name,
 				description=description,
 				system_prompt=system_prompt,
-				model=model,
 				knowledge_tags=knowledge_tags,
 				shared=shared if shared is not None else False,
 			)
@@ -132,7 +132,6 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				owner=user,
 				description=description,
 				system_prompt=system_prompt,
-				model=model,
 				knowledge_tags=knowledge_tags,
 				shared=shared,
 			)

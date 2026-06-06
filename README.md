@@ -80,7 +80,8 @@ Agents are domain expert personas stored in the database. Each agent has a syste
 **Agent Q&A flow:**
 
 1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. `knowledge_search(query, tag="agent:<name>")` → ranked candidates (metadata + score only)
+2. For each tag in `knowledge_tags` (default `["agent:<name>"]` when empty):
+   `knowledge_search(query, tag=tag)` → merge results across all tags
 3. `knowledge_read(id=...)` for entries worth reading
 4. `docs_search` / `docs_read` if CHM documentation is relevant
 5. Answer using `system_prompt` as persona
@@ -94,8 +95,8 @@ Agents are domain expert personas stored in the database. Each agent has a syste
 
 **agent_write modes:**
 
-- `mode="create"` — `name`, `description`, `system_prompt` required; `model`, `knowledge_tags`, `shared` optional.
-- `mode="update"` — `name_or_id` required; all other fields are partial overrides.
+- `mode="create"` — `name`, `description`, `system_prompt` required; `knowledge_tags` and `shared` optional.
+- `mode="update"` — `name_or_id` required; all other fields are partial overrides (omit to keep existing value).
 
 ### Knowledge
 

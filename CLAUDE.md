@@ -8,9 +8,9 @@ A personal MCP server built with FastMCP 3.x. New tools, resources, prompts, and
 
 **Registration pattern:** Each tool module exposes a `register(mcp: FastMCP)` function. `server.py` imports and calls `register(mcp)`. This avoids circular imports and works with the FastMCP dev inspector.
 
-**Tool naming convention:** Use `module_verb` so tools group alphabetically by module (e.g. `docs_search`, `knowledge_write`, `agent_context`). Never use `verb_module`.
+**Tool naming convention:** Use `module_verb` so tools group alphabetically by module (e.g. `docs_search`, `knowledge_write`, `agent_read`). Never use `verb_module`.
 
-**Suffix convention:** `_read`/`_search`/`_context` = read-only; `_write`/`_extract_learnings` = creates/modifies data; `_delete` = destructive.
+**Suffix convention:** `_read`/`_search` = read-only; `_write` = creates/modifies data; `_delete` = destructive.
 
 ## Agents
 
@@ -18,7 +18,8 @@ Agents are domain expert personas stored in the database. Context assembly is fu
 
 **Workflow:**
 1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. `knowledge_search(query, tag="agent:<name>")` → ranked candidates (metadata + score only)
+2. For each tag in `knowledge_tags` (default `["agent:<name>"]` when empty):
+   `knowledge_search(query, tag=tag)` → merge results across all tags
 3. `knowledge_read(id=...)` for entries worth reading
 4. `docs_search` / `docs_read` if CHM documentation is relevant
 5. Answer using `system_prompt` as persona
