@@ -80,8 +80,11 @@ Agents are domain expert personas stored in the database. Each agent has a syste
 **Agent Q&A flow:**
 
 1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. For each tag in `knowledge_tags` (default `["agent:<name>"]` when empty):
-   `knowledge_search(query, tag=tag)` → merge results across all tags
+2. Search the agent's knowledge. Always search the `agent:<name>` baseline:
+   `knowledge_search(query, tag="agent:<name>")`. If `knowledge_tags` is
+   non-empty, run one additional `knowledge_search` per listed tag and merge
+   the results. Most agents leave `knowledge_tags` empty and rely on the
+   baseline alone.
 3. `knowledge_read(id=...)` for entries worth reading
 4. `docs_search` / `docs_read` if CHM documentation is relevant
 5. Answer using `system_prompt` as persona

@@ -36,8 +36,11 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		**Agent Q&A flow** (use after fetching a specific agent):
 		1. agent_read(name) → system_prompt, knowledge_tags
-		2. For each tag in knowledge_tags (default ["agent:<name>"] when empty):
-		   knowledge_search(query, tag=tag) → merge results across all tags
+		2. Search the agent's knowledge. Always search the agent:<name> baseline:
+		   knowledge_search(query, tag="agent:<name>"). If knowledge_tags is
+		   non-empty, run one additional knowledge_search per listed tag and merge
+		   the results. Most agents leave knowledge_tags empty and rely on the
+		   baseline alone.
 		3. knowledge_read(id=...) for entries worth reading
 		4. docs_search / docs_read if CHM documentation is relevant
 		5. Answer using system_prompt as persona
@@ -95,9 +98,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    name: Agent slug (e.g. "omnitracker"). Required for create.
 		    description: One-line description. Required for create.
 		    system_prompt: Full persona and instructions. Required for create.
-		    knowledge_tags: Tags to search when retrieving this agent's knowledge.
-		      Defaults to ["agent:<name>"] when empty, so the agent's own tag is
-		      always covered without having to set this explicitly.
+		    knowledge_tags: Optional extra tag scopes the agent searches in addition
+		      to its own agent:<name> namespace (e.g. a shared agent:common). Leave
+		      empty to search only agent:<name>.
 		    shared: Whether agent is visible to all authenticated users (default: false).
 		"""
 		user = get_github_login()

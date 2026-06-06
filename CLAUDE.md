@@ -18,12 +18,22 @@ Agents are domain expert personas stored in the database. Context assembly is fu
 
 **Workflow:**
 1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. For each tag in `knowledge_tags` (default `["agent:<name>"]` when empty):
-   `knowledge_search(query, tag=tag)` → merge results across all tags
+2. Search the agent's knowledge. Always search the `agent:<name>` baseline:
+   `knowledge_search(query, tag="agent:<name>")`. If `knowledge_tags` is
+   non-empty, run one additional `knowledge_search` per listed tag and merge
+   the results. Most agents leave `knowledge_tags` empty and rely on the
+   baseline alone.
 3. `knowledge_read(id=...)` for entries worth reading
 4. `docs_search` / `docs_read` if CHM documentation is relevant
 5. Answer using `system_prompt` as persona
 6. `knowledge_write(tags=["agent:<name>"])` to persist new facts
+
+**`knowledge_tags`** — optional list of *extra* tag scopes searched in addition to
+the agent's own `agent:<name>` namespace. Use it when an agent should also draw
+on shared or cross-domain knowledge (e.g. `agent:common`). Empty is the normal
+case — the agent then searches only `agent:<name>`. The `agent:<name>` baseline
+is always searched regardless of this field, so this can only broaden scope,
+never hide the agent's own knowledge.
 
 **Permission model:** Owner-only writes and deletes. Reads open to all authenticated users; private items hidden from non-owners.
 
