@@ -272,6 +272,13 @@ class TestKnowledgeWrite:
 		assert result["title"] == "New"
 		assert result["content"] == "C"  # preserved
 
+	async def test_update_preserves_shared_when_omitted(self, tools):
+		fns, ks, as_ = tools
+		entry = await ks.add(owner="alice", title="T", content="C", shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_write"](mode="update", id=entry["id"], title="New"))
+		assert result["shared"] is True  # must not be silently reset to False
+
 	async def test_update_requires_id(self, tools):
 		fns, ks, as_ = tools
 		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):

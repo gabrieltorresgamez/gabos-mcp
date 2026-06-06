@@ -110,8 +110,8 @@ A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes 
 
 **knowledge_write modes:**
 
-- `mode="create"` — `title` and `content` required; `id` must be omitted; `tags`, `shared` optional.
-- `mode="update"` — `id` required; other fields are partial overrides.
+- `mode="create"` — `title` and `content` required; `id` must be omitted; `tags` and `shared` optional (`shared` defaults to `false`).
+- `mode="update"` — `id` required; all other fields are partial overrides (omit to keep existing value, including `shared`).
 
 **knowledge_search** params: `query`, `tag?`, `owner?`, `limit?`, `offset?`. The `score` field is the FTS5 BM25 rank; lower (more negative) = better match. Visibility follows the same rules as `knowledge_read`.
 

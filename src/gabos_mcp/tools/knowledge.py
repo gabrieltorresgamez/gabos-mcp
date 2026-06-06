@@ -135,7 +135,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		title: str | None = None,
 		content: str | None = None,
 		tags: list[str] | None = None,
-		shared: bool = False,
+		shared: bool | None = None,
 	) -> str:
 		"""Create or update a knowledge entry. Authentication required.
 
@@ -158,7 +158,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    title: Entry title. Required for create.
 		    content: Markdown content. Required for create.
 		    tags: Tag list. Optional for create; partial override for update.
-		    shared: Whether visible to all authenticated users (default: false).
+		    shared: Whether visible to all authenticated users (create default: false; update default: keep existing).
 		"""
 		user = get_github_login()
 		if user == "anonymous":
@@ -174,7 +174,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				return json.dumps({"error": "content is required for mode='create'."})
 			if tags:
 				await _assert_agent_tags_owned(user, tags, agent_store)
-			entry = await store.add(owner=user, title=title, content=content, tags=tags, shared=shared)
+			entry = await store.add(owner=user, title=title, content=content, tags=tags, shared=shared or False)
 			return json.dumps(entry, indent=2)
 
 		if mode == "update":
@@ -188,7 +188,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				title=title,
 				content=content,
 				tags=tags,
-				shared=shared if shared is not None else None,
+				shared=shared,
 			)
 			return json.dumps(entry, indent=2)
 

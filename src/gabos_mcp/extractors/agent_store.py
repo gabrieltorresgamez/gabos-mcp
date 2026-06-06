@@ -85,7 +85,6 @@ class AgentStore:
 				system_prompt TEXT NOT NULL,
 				model         TEXT NOT NULL,
 				knowledge_tags TEXT NOT NULL DEFAULT '[]',
-				auto_learn    INTEGER NOT NULL DEFAULT 1,
 				shared        INTEGER NOT NULL DEFAULT 0,
 				created_at    TEXT NOT NULL,
 				updated_at    TEXT NOT NULL
@@ -95,23 +94,6 @@ class AgentStore:
 			await conn.execute("ALTER TABLE agents ADD COLUMN owner TEXT NOT NULL DEFAULT 'unknown'")
 		if not await self._column_exists("agents", "shared"):
 			await conn.execute("ALTER TABLE agents ADD COLUMN shared INTEGER NOT NULL DEFAULT 0")
-		# agent_doc_refs kept for schema backward-compatibility (cascade on agent delete).
-		await conn.execute("""
-			CREATE TABLE IF NOT EXISTS agent_doc_refs (
-				id             TEXT PRIMARY KEY,
-				agent_id       TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-				context_key    TEXT NOT NULL,
-				app            TEXT NOT NULL,
-				source         TEXT NOT NULL,
-				page_path      TEXT NOT NULL,
-				relevance_note TEXT,
-				created_by     TEXT NOT NULL DEFAULT 'unknown',
-				created_at     TEXT NOT NULL,
-				UNIQUE(agent_id, context_key, app, source, page_path)
-			)
-		""")
-		if not await self._column_exists("agent_doc_refs", "created_by"):
-			await conn.execute("ALTER TABLE agent_doc_refs ADD COLUMN created_by TEXT NOT NULL DEFAULT 'unknown'")
 		await conn.commit()
 
 	@staticmethod

@@ -216,7 +216,6 @@ class KnowledgeStore:
 		limit: int = 50,
 		offset: int = 0,
 		caller: str | None = None,
-		include_content: bool = False,
 	) -> list[dict]:
 		"""List entries, optionally filtered by owner and/or tag.
 
@@ -227,10 +226,9 @@ class KnowledgeStore:
 		    offset: Number of entries to skip.
 		    caller: If provided, restrict results to entries visible to this user
 		            (own entries or entries where shared=True).
-		    include_content: If True, include the content field in results.
 
 		Returns:
-		    List of entry dicts ordered by updated_at descending.
+		    List of entry dicts ordered by updated_at descending, without content.
 		"""
 		conn = await self._connect()
 		query = "SELECT DISTINCT knowledge.* FROM knowledge"
@@ -262,8 +260,7 @@ class KnowledgeStore:
 		results = []
 		for r in rows:
 			d = self._row_to_dict(r)
-			if not include_content:
-				d.pop("content", None)
+			d.pop("content", None)
 			results.append(d)
 		return results
 
