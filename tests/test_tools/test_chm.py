@@ -11,22 +11,10 @@ from gabos_mcp.extractors.chm import ChmExtractor
 from gabos_mcp.tools.chm import register
 
 
-def _make_mcp():
-	class Stub:
-		def __init__(self) -> None:
-			self.tools: dict = {}
-
-		def tool(self, fn):
-			self.tools[fn.__name__] = fn
-			return fn
-
-	return Stub()
-
-
 @pytest_asyncio.fixture
-async def tools(tmp_path):
+async def tools(tmp_path, make_mcp):
 	chm = ChmExtractor(apps={"APP": {"src": str(tmp_path / "dummy.chm")}}, cache_dir=str(tmp_path / "cache"))
-	mcp = _make_mcp()
+	mcp = make_mcp()
 	with patch("gabos_mcp.tools.chm.ChmExtractor", return_value=chm):
 		register(mcp)
 	return mcp.tools, chm

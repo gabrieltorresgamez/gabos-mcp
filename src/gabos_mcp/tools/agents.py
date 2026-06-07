@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import TYPE_CHECKING, Literal
 
 from gabos_mcp.utils.auth import get_github_login
@@ -11,8 +10,6 @@ from gabos_mcp.utils.stores import get_agent_store
 
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
-
-logger = logging.getLogger(__name__)
 
 
 def register(mcp: FastMCP) -> None:  # noqa: C901

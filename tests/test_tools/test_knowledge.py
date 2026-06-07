@@ -13,28 +13,6 @@ from gabos_mcp.extractors.knowledge import KnowledgeStore
 from gabos_mcp.tools.knowledge import _assert_agent_tags_owned, register
 
 
-def _make_mcp():
-	"""Return a minimal FastMCP-like stub that captures registered tools."""
-
-	class Stub:
-		def __init__(self) -> None:
-			self.tools: dict = {}
-			self.resources: dict = {}
-
-		def tool(self, fn):
-			self.tools[fn.__name__] = fn
-			return fn
-
-		def resource(self, uri):
-			def decorator(fn):
-				self.resources[uri] = fn
-				return fn
-
-			return decorator
-
-	return Stub()
-
-
 @pytest_asyncio.fixture
 async def stores(tmp_path):
 	ks = KnowledgeStore(db_path=str(tmp_path / "knowledge.db"))
@@ -47,9 +25,9 @@ async def stores(tmp_path):
 
 
 @pytest_asyncio.fixture
-async def tools(stores, tmp_path):
+async def tools(stores, tmp_path, make_mcp):
 	ks, as_ = stores
-	mcp = _make_mcp()
+	mcp = make_mcp()
 	with (
 		patch("gabos_mcp.tools.knowledge.get_knowledge_store", return_value=ks),
 		patch("gabos_mcp.tools.knowledge.get_agent_store", return_value=as_),

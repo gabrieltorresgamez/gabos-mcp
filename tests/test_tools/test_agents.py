@@ -13,18 +13,6 @@ from gabos_mcp.extractors.knowledge import KnowledgeStore
 from gabos_mcp.tools.agents import register
 
 
-def _make_mcp():
-	class Stub:
-		def __init__(self) -> None:
-			self.tools: dict = {}
-
-		def tool(self, fn):
-			self.tools[fn.__name__] = fn
-			return fn
-
-	return Stub()
-
-
 @pytest_asyncio.fixture
 async def stores(tmp_path):
 	as_ = AgentStore(db_path=str(tmp_path / "agents.db"))
@@ -37,9 +25,9 @@ async def stores(tmp_path):
 
 
 @pytest_asyncio.fixture
-async def tools(stores, tmp_path):
+async def tools(stores, tmp_path, make_mcp):
 	as_, ks = stores
-	mcp = _make_mcp()
+	mcp = make_mcp()
 	with (
 		patch("gabos_mcp.tools.agents.get_agent_store", return_value=as_),
 	):
