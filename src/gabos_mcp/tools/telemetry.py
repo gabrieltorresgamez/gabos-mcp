@@ -16,38 +16,39 @@ if TYPE_CHECKING:
 	from prefab_ui.components.data_table import ExpandableRow
 
 
-_SUFFIX_VARIANT: dict[str, str] = {
-	"_read": "info",
-	"_search": "secondary",
-	"_write": "warning",
-	"_delete": "destructive",
-	"_stats": "default",
+# (variant, css-color) per suffix — single source of truth for badge + chart styling
+_SUFFIX_META: dict[str, tuple[str, str]] = {
+	"_read":   ("info",        "#3b82f6"),
+	"_search": ("secondary",   "#6b7280"),
+	"_write":  ("warning",     "#f59e0b"),
+	"_delete": ("destructive", "#ef4444"),
+	"_stats":  ("default",     "#8b5cf6"),
 }
-
-# CSS colors kept in sync with the badge variants above
-_SUFFIX_COLOR: dict[str, str] = {
-	"_read": "#3b82f6",
-	"_search": "#6b7280",
-	"_write": "#f59e0b",
-	"_delete": "#ef4444",
-	"_stats": "#8b5cf6",
-}
-_OTHER_COLOR = "#9ca3af"
+_OTHER: tuple[str, str] = ("outline", "#9ca3af")
+_SUFFIX_ORDER = {s: i for i, s in enumerate([*_SUFFIX_META, "_other"])}
 
 
 def _tool_suffix(tool: str) -> str:
-	for suffix in _SUFFIX_COLOR:
+	for suffix in _SUFFIX_META:
 		if tool.endswith(suffix):
 			return suffix
 	return "_other"
 
 
+def _sort_tools(tools: list[tuple[str, int]]) -> list[tuple[str, int]]:
+	return sorted(tools, key=lambda tc: (_SUFFIX_ORDER[_tool_suffix(tc[0])], tc[0]))
+
+
+def _tool_badge(tool: str) -> Badge:
+	variant, _ = _SUFFIX_META.get(_tool_suffix(tool), _OTHER)
+	return Badge(tool, variant=variant)  # type: ignore[arg-type]
+
+
 def _tool_bar_data_and_series(
 	tools: list[tuple[str, int]],
 ) -> tuple[list[dict[str, Any]], list[ChartSeries]]:
-	"""Build stacked series so each bar is colored by its tool suffix."""
-	all_suffixes = [*_SUFFIX_COLOR.keys(), "_other"]
-	colors = {**_SUFFIX_COLOR, "_other": _OTHER_COLOR}
+	all_suffixes = [*_SUFFIX_META.keys(), "_other"]
+	colors = {s: meta[1] for s, meta in _SUFFIX_META.items()} | {"_other": _OTHER[1]}
 	active: set[str] = set()
 	data: list[dict[str, Any]] = []
 	for tool, count in tools:
@@ -65,23 +66,19 @@ def _tool_bar_data_and_series(
 	return data, series
 
 
-def _tool_badge(tool: str) -> Badge:
-	for suffix, variant in _SUFFIX_VARIANT.items():
-		if tool.endswith(suffix):
-			return Badge(tool, variant=variant)  # type: ignore[arg-type]
-	return Badge(tool, variant="outline")
-
-
-def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableRow]:
+def _tool_table_rows(
+	tools: list[tuple[str, int]],
+	tool_errors: dict[str, int],
+	duration_stats: dict[str, dict[str, float]],
+) -> list[dict[str, Any] | ExpandableRow]:
 	rows = []
-	for tool, count in stats["tools"]:
-		errors = stats["tool_errors"].get(tool, 0)
-		d = stats["duration_stats"].get(tool, {})
+	for tool, count in tools:
+		d = duration_stats.get(tool, {})
 		rows.append(
 			{
 				"tool": _tool_badge(tool),
 				"calls": str(count),
-				"errors": str(errors),
+				"errors": str(tool_errors.get(tool, 0)),
 				"min_ms": f"{d.get('min', 0):.1f}",
 				"max_ms": f"{d.get('max', 0):.1f}",
 				"mean_ms": f"{d.get('mean', 0):.1f}",
@@ -93,7 +90,8 @@ def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableR
 
 
 def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
-	tool_bar_data, tool_bar_series = _tool_bar_data_and_series(stats["tools"])
+	tools = _sort_tools(stats["tools"])
+	tool_bar_data, tool_bar_series = _tool_bar_data_and_series(tools)
 	caller_bar_data = [{"caller": c, "calls": n} for c, n in stats["callers"]]
 	view = Column(
 		children=[
@@ -134,7 +132,7 @@ def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
 					DataTableColumn(key="median_ms", header="Median", sortable=True),
 					DataTableColumn(key="std_ms", header="Std", sortable=True),
 				],
-				rows=_tool_table_rows(stats),
+				rows=_tool_table_rows(tools, stats["tool_errors"], stats["duration_stats"]),
 			),
 		],
 		gap=6,
