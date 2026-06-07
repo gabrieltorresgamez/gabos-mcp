@@ -11,9 +11,10 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware.timing import DetailedTimingMiddleware
 from starlette.responses import JSONResponse
 
-from gabos_mcp.tools import agents, chm, knowledge
+from gabos_mcp.tools import agents, chm, knowledge, telemetry
 from gabos_mcp.utils.auth import build_github_auth
 from gabos_mcp.utils.backup import backup_scheduler
+from gabos_mcp.utils.telemetry import TelemetryMiddleware
 
 if TYPE_CHECKING:
 	from collections.abc import AsyncGenerator
@@ -37,10 +38,12 @@ async def _lifespan(_server: FastMCP) -> AsyncGenerator[None]:
 auth = build_github_auth()
 mcp = FastMCP("gabos-mcp", lifespan=_lifespan, **({"auth": auth} if auth else {}))
 mcp.add_middleware(DetailedTimingMiddleware())
+mcp.add_middleware(TelemetryMiddleware())
 
 agents.register(mcp)
 chm.register(mcp)
 knowledge.register(mcp)
+telemetry.register(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])

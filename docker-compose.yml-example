@@ -16,6 +16,8 @@ services:
       # GABOS_BACKUP_DIR: /data/backups
       # GABOS_BACKUP_TIME: 02:00
       # GABOS_BACKUP_RETENTION_DAYS: 30
+      # GABOS_TELEMETRY_LOG: /data/tool_calls.log
+      # GABOS_ADMIN_USERS: yourgithubhandle
       # GITHUB_CLIENT_ID: Ov23li...
       # GITHUB_CLIENT_SECRET: your-github-client-secret
       # MCP_BASE_URL: https://your-server.com

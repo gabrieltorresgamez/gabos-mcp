@@ -19,12 +19,14 @@ Configure via `docker-compose.yml` (copy from `docker-compose.yml-example`). Env
 | `GABOS_CHM_CACHE_DIR`         | `~/.cache/gabos-mcp/chm`                | CHM extraction/index cache directory              |
 | `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db` | Path to the knowledge SQLite database             |
 | `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`    | Path to the agents SQLite database                |
-| `GABOS_BACKUP_DIR`            | _(none — backups disabled)_             | Absolute path to the backup folder                |
-| `GABOS_BACKUP_TIME`           | `02:00`                                 | Time of day to run the backup (24h, local time)   |
-| `GABOS_BACKUP_RETENTION_DAYS` | `30`                                    | Days to keep backups (0 = keep forever)           |
-| `GITHUB_CLIENT_ID`            | _(none)_                                | GitHub OAuth app client ID (enables OAuth)        |
-| `GITHUB_CLIENT_SECRET`        | _(none)_                                | GitHub OAuth app client secret                    |
-| `MCP_BASE_URL`                | _(none)_                                | Public URL of the server (e.g. `https://my.host`) |
+| `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                              | Absolute path to the backup folder                          |
+| `GABOS_BACKUP_TIME`           | `02:00`                                                  | Time of day to run the backup (24h, local time)             |
+| `GABOS_BACKUP_RETENTION_DAYS` | `30`                                                     | Days to keep backups (0 = keep forever)                     |
+| `GABOS_TELEMETRY_LOG`         | `~/.local/share/logs/gabos-mcp/tool_calls.log`           | Path to the logfmt tool-call log                            |
+| `GABOS_ADMIN_USERS`           | _(none — `telemetry_stats` inaccessible)_                | Comma-separated GitHub handles allowed to call admin tools  |
+| `GITHUB_CLIENT_ID`            | _(none)_                                                 | GitHub OAuth app client ID (enables OAuth)                  |
+| `GITHUB_CLIENT_SECRET`        | _(none)_                                                 | GitHub OAuth app client secret                              |
+| `MCP_BASE_URL`                | _(none)_                                                 | Public URL of the server (e.g. `https://my.host`)           |
 
 When all three `GITHUB_*`/`MCP_BASE_URL` variables are set, the server requires GitHub OAuth 2.1 authentication. When any are missing, the server runs without auth (suitable for local stdio usage).
 
@@ -65,13 +67,14 @@ Tools are named with a suffix that reflects their side-effect class, making per-
 
 ## Tools
 
-Tools are grouped by module and named `module_verb` so they sort alphabetically by domain. There are 9 tools total.
+Tools are grouped by module and named `module_verb` so they sort alphabetically by domain. There are 10 tools total.
 
 ### Permission model
 
 - **Reads are open** to all authenticated users. Private items (agents and knowledge with `shared=false`) are hidden from non-owners but do not raise errors.
 - **Writes and deletes are owner-only.** Only the resource owner may update or delete it.
 - **Agent-tag ownership:** adding a tag of the form `agent:<name>` or `agent:<name>:folder:<key>` to a knowledge entry requires you to own that agent.
+- **Admin-only tools:** `telemetry_stats` requires the caller to be listed in `GABOS_ADMIN_USERS`.
 
 ### Agents
 
@@ -144,6 +147,14 @@ rm -rf "$GABOS_CHM_CACHE_DIR"
 ```
 
 The server detects external deletions and rebuilds automatically on next tool use — no restart required.
+
+### Telemetry
+
+Every tool call is logged to the logfmt file at `GABOS_TELEMETRY_LOG`. The admin tool provides a live dashboard.
+
+| Tool               | Description                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `telemetry_stats`  | Interactive dashboard: call counts by tool and user (bar charts), plus a sortable duration-stats table (min/max/mean/median/std per tool). Admin-only — requires `GABOS_ADMIN_USERS`. |
 
 ### Claude Code — Remote (OAuth)
 
