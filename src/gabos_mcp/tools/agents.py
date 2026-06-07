@@ -75,12 +75,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		caller = None if user == "anonymous" else user
 		await agent_store.migrate()
 
-		agent = await agent_store.get_by_id(id)
+		agent = await agent_store.get_by_id(id, caller=caller)
 		if agent is None:
 			raise KeyError(f"Agent '{id}' not found.")
-		if caller is not None and agent.owner != caller and not agent.shared:
-			raise PermissionError(f"Agent '{id}' not found or access denied.")
-
 		return json.dumps(agent.to_dict(), indent=2)
 
 	# ── Write ────────────────────────────────────────────────────────────────────

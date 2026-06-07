@@ -55,6 +55,21 @@ class TestAgentGetById:
 	async def test_returns_none_for_missing(self, store):
 		assert await store.get_by_id("00000000-0000-0000-0000-000000000000") is None
 
+	async def test_caller_can_see_own_private_agent(self, store):
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
+		found = await store.get_by_id(agent.id, caller="alice")
+		assert found is not None
+
+	async def test_caller_can_see_shared_agent(self, store):
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=True)
+		found = await store.get_by_id(agent.id, caller="bob")
+		assert found is not None
+
+	async def test_caller_denied_private_agent(self, store):
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
+		with pytest.raises(PermissionError):
+			await store.get_by_id(agent.id, caller="bob")
+
 
 @pytest.mark.asyncio
 class TestAgentList:

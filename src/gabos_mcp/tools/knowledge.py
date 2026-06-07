@@ -103,11 +103,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		caller = None if user == "anonymous" else user
 		await store.migrate()
 
-		entry = await store.get(id)
+		entry = await store.get(id, caller=caller)
 		if entry is None:
 			raise KeyError(f"Knowledge entry '{id}' not found.")
-		if caller is not None and entry["owner"] != caller and not entry.get("shared"):
-			raise PermissionError(f"Knowledge entry '{id}' not found or access denied.")
 		return json.dumps(entry, indent=2)
 
 	@mcp.tool

@@ -170,12 +170,26 @@ class AgentStore:
 			updated_at=now,
 		)
 
-	async def get_by_id(self, id: str) -> Agent | None:
-		"""Return an agent by UUID only, or None if not found."""
+	async def get_by_id(self, id: str, caller: str | None = None) -> Agent | None:
+		"""Return an agent by UUID, or None if not found.
+
+		Args:
+		    id: Agent UUID.
+		    caller: If provided, raises PermissionError when the agent exists but
+		            is private and not owned by this caller.
+
+		Raises:
+		    PermissionError: If the agent exists but is not visible to caller.
+		"""
 		conn = await self._connect()
 		cursor = await conn.execute("SELECT * FROM agents WHERE id = ?", (id,))
 		row = await cursor.fetchone()
-		return self._row_to_agent(row) if row else None
+		if row is None:
+			return None
+		agent = self._row_to_agent(row)
+		if caller is not None and agent.owner != caller and not agent.shared:
+			raise PermissionError(f"Agent '{id}' not found or access denied.")
+		return agent
 
 	async def list_agents(self, caller: str | None = None) -> list[Agent]:
 		"""Return agents visible to the caller, ordered by name.

@@ -51,6 +51,21 @@ class TestGet:
 		fetched = await store.get(entry["id"])
 		assert fetched == entry
 
+	async def test_caller_can_see_own_private_entry(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", shared=False)
+		fetched = await store.get(entry["id"], caller="alice")
+		assert fetched is not None
+
+	async def test_caller_can_see_shared_entry(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", shared=True)
+		fetched = await store.get(entry["id"], caller="bob")
+		assert fetched is not None
+
+	async def test_caller_denied_private_entry(self, store):
+		entry = await store.add(owner="alice", title="T", content="C", shared=False)
+		with pytest.raises(PermissionError):
+			await store.get(entry["id"], caller="bob")
+
 
 @pytest.mark.asyncio
 class TestUpdate:

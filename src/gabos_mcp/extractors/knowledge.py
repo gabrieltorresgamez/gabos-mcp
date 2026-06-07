@@ -202,12 +202,26 @@ class KnowledgeStore:
 			"updated_at": now,
 		}
 
-	async def get(self, id: str) -> dict | None:
-		"""Return a single entry by ID, or None if not found."""
+	async def get(self, id: str, caller: str | None = None) -> dict | None:
+		"""Return a single entry by ID, or None if not found.
+
+		Args:
+		    id: Entry UUID.
+		    caller: If provided, raises PermissionError when the entry exists but
+		            is private and not owned by this caller.
+
+		Raises:
+		    PermissionError: If the entry exists but is not visible to caller.
+		"""
 		conn = await self._connect()
 		cursor = await conn.execute("SELECT * FROM knowledge WHERE id = ?", (id,))
 		row = await cursor.fetchone()
-		return self._row_to_dict(row) if row else None
+		if row is None:
+			return None
+		entry = self._row_to_dict(row)
+		if caller is not None and entry["owner"] != caller and not entry.get("shared"):
+			raise PermissionError(f"Knowledge entry '{id}' not found or access denied.")
+		return entry
 
 	async def update(
 		self,
