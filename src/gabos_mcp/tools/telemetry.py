@@ -16,15 +16,15 @@ if TYPE_CHECKING:
 	from prefab_ui.components.data_table import ExpandableRow
 
 
-# (variant, css-color) per suffix — single source of truth for badge + chart styling
+# (variant, css-color) per suffix — chart colors use the same CSS variables as badges
 _SUFFIX_META: dict[str, tuple[str, str]] = {
-	"_read":   ("info",        "#3b82f6"),
-	"_search": ("secondary",   "#6b7280"),
-	"_write":  ("warning",     "#f59e0b"),
-	"_delete": ("destructive", "#ef4444"),
-	"_stats":  ("default",     "#8b5cf6"),
+	"_read":   ("info",        "var(--info)"),
+	"_search": ("secondary",   "var(--secondary-foreground)"),
+	"_write":  ("warning",     "var(--warning)"),
+	"_delete": ("destructive", "var(--destructive)"),
+	"_stats":  ("default",     "var(--primary)"),
 }
-_OTHER: tuple[str, str] = ("outline", "#9ca3af")
+_OTHER: tuple[str, str] = ("outline", "var(--muted-foreground)")
 _SUFFIX_ORDER = {s: i for i, s in enumerate([*_SUFFIX_META, "_other"])}
 
 
