@@ -56,8 +56,8 @@ def _logfmt_value(v: object) -> str:
 	if isinstance(v, float):
 		return f"{v:.2f}"
 	s = str(v)
-	if " " in s or '"' in s or "=" in s:
-		escaped = s.replace('"', '\\"')
+	if " " in s or '"' in s or "=" in s or "\n" in s:
+		escaped = s.replace('"', '\\"').replace("\n", "\\n")
 		return f'"{escaped}"'
 	return s
 
@@ -88,7 +88,7 @@ def _parse_logfmt(line: str) -> dict[str, str]:
 				if line[i] == "\\" and i + 1 < n:
 					i += 1
 				i += 1
-			value = line[start:i].replace('\\"', '"')
+			value = line[start:i].replace('\\"', '"').replace("\\n", "\n")
 			i += 1
 		else:
 			start = i
@@ -153,7 +153,9 @@ def _compute_stats(lines: list[str], top_n: int) -> dict[str, Any]:
 		if not line.strip():
 			continue
 		rec = _parse_logfmt(line)
-		tool = rec.get("tool", "unknown")
+		tool = rec.get("tool")
+		if tool is None:
+			continue
 		caller = rec.get("caller", "unknown")
 		ok = rec.get("ok", "true") == "true"
 		tool_counts[tool] += 1

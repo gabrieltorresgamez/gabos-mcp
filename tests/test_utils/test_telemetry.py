@@ -49,6 +49,12 @@ def test_format_logfmt_false_bool():
 	assert line == "ok=false"
 
 
+def test_format_logfmt_escapes_newlines():
+	line = _format_logfmt({"error": "line one\nline two"})
+	assert "\n" not in line
+	assert "\\n" in line
+
+
 # ── _parse_logfmt ────────────────────────────────────────────────────────────
 
 
@@ -65,6 +71,12 @@ def test_parse_logfmt_quoted_value():
 def test_parse_logfmt_quoted_with_escaped_quote():
 	rec = _parse_logfmt('error="it said \\"hello\\""')
 	assert rec["error"] == 'it said "hello"'
+
+
+def test_parse_logfmt_unescapes_newlines():
+	line = _format_logfmt({"error": "line one\nline two"})
+	rec = _parse_logfmt(line)
+	assert rec["error"] == "line one\nline two"
 
 
 def test_parse_logfmt_roundtrip():
@@ -256,3 +268,17 @@ def test_compute_stats_skips_blank_lines():
 	lines = ["", "  ", "ts=2026-01-01T00:00:00Z tool=x caller=a duration_ms=1.00 ok=true"]
 	stats = _compute_stats(lines, 5)
 	assert stats["total"] == 1
+
+
+def test_compute_stats_skips_multiline_error_continuation():
+	# Simulates a log entry whose error value spans multiple lines (written before
+	# newline-escaping was added). Continuation lines must not inflate counts.
+	lines = [
+		'ts=2026-01-01T00:00:00Z tool=foo caller=alice duration_ms=1.00 ok=false error="bad\n',
+		"continuation line\n",
+		'another line"\n',
+	]
+	stats = _compute_stats(lines, 10)
+	assert stats["total"] == 1
+	assert stats["top_tools"][0] == ("foo", 1)
+	assert "unknown" not in dict(stats["top_tools"])
