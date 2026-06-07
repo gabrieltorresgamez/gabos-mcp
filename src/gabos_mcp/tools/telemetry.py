@@ -24,6 +24,46 @@ _SUFFIX_VARIANT: dict[str, str] = {
 	"_stats": "default",
 }
 
+# CSS colors kept in sync with the badge variants above
+_SUFFIX_COLOR: dict[str, str] = {
+	"_read": "#3b82f6",
+	"_search": "#6b7280",
+	"_write": "#f59e0b",
+	"_delete": "#ef4444",
+	"_stats": "#8b5cf6",
+}
+_OTHER_COLOR = "#9ca3af"
+
+
+def _tool_suffix(tool: str) -> str:
+	for suffix in _SUFFIX_COLOR:
+		if tool.endswith(suffix):
+			return suffix
+	return "_other"
+
+
+def _tool_bar_data_and_series(
+	tools: list[tuple[str, int]],
+) -> tuple[list[dict[str, Any]], list[ChartSeries]]:
+	"""Build stacked series so each bar is colored by its tool suffix."""
+	all_suffixes = [*_SUFFIX_COLOR.keys(), "_other"]
+	colors = {**_SUFFIX_COLOR, "_other": _OTHER_COLOR}
+	active: set[str] = set()
+	data: list[dict[str, Any]] = []
+	for tool, count in tools:
+		s = _tool_suffix(tool)
+		active.add(s)
+		row: dict[str, Any] = {"tool": tool}
+		for sf in all_suffixes:
+			row[sf] = count if sf == s else 0
+		data.append(row)
+	series = [
+		ChartSeries(dataKey=sf, label=sf.lstrip("_") or "other", color=colors[sf])
+		for sf in all_suffixes
+		if sf in active
+	]
+	return data, series
+
 
 def _tool_badge(tool: str) -> Badge:
 	for suffix, variant in _SUFFIX_VARIANT.items():
@@ -53,7 +93,7 @@ def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableR
 
 
 def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
-	tool_bar_data = [{"tool": t, "calls": c} for t, c in stats["tools"]]
+	tool_bar_data, tool_bar_series = _tool_bar_data_and_series(stats["tools"])
 	caller_bar_data = [{"caller": c, "calls": n} for c, n in stats["callers"]]
 	view = Column(
 		children=[
@@ -70,8 +110,9 @@ def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
 			Heading(content="Calls by Tool", level=2),
 			BarChart(
 				data=tool_bar_data,
-				series=[ChartSeries(dataKey="calls", label="Calls")],
+				series=tool_bar_series,
 				xAxis="tool",
+				stacked=True,
 			),
 			Separator(),
 			Heading(content="Calls by User", level=2),
