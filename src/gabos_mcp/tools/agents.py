@@ -104,7 +104,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		mode="update": id is required; description, system_prompt, knowledge_tags,
 		  and shared are partial overrides (omit to keep current value); only the
-		  agent owner may update. Agent names are immutable.
+		  agent owner may update. Passing name returns an error — agent names are
+		  immutable.
 
 		To attach knowledge to an agent, use knowledge_write with tags=["agent:<name>"].
 
@@ -146,6 +147,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		elif mode == "update":
 			if not id:
 				return json.dumps({"error": "id is required for mode='update'."})
+			if name is not None:
+				return json.dumps({"error": "name is immutable and cannot be changed after creation."})
 			agent = await agent_store.update(
 				id=id,
 				owner=user,

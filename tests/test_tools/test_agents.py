@@ -169,6 +169,13 @@ class TestAgentWrite:
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
 			await fns["agent_write"](mode="update", id=agent.id, description="X")
 
+	async def test_update_rejects_name(self, tools):
+		fns, as_, ks = tools
+		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
+			result = json.loads(await fns["agent_write"](mode="update", id=agent.id, name="new-name"))
+		assert "error" in result
+
 	async def test_update_requires_id(self, tools):
 		fns, as_, ks = tools
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
