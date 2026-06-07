@@ -19,16 +19,17 @@ A personal MCP server built with FastMCP 3.x. New tools, resources, prompts, and
 Agents are domain expert personas stored in the database. Context assembly is fully manual — the model retrieves what it needs, rather than having context force-fed to it.
 
 **Workflow:**
-1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. Search the agent's knowledge. Always search the `agent:<name>` baseline:
+1. `agent_search()` → pick agent, note `id` and `name`
+2. `agent_read(id=...)` → `system_prompt`, `knowledge_tags`
+3. Search the agent's knowledge. Always search the `agent:<name>` baseline:
    `knowledge_search(query, tag="agent:<name>")`. If `knowledge_tags` is
    non-empty, run one additional `knowledge_search` per listed tag and merge
    the results. Most agents leave `knowledge_tags` empty and rely on the
    baseline alone.
-3. `knowledge_read(id=...)` for entries worth reading
-4. `docs_search` / `docs_read` if CHM documentation is relevant
-5. Answer using `system_prompt` as persona
-6. `knowledge_write(tags=["agent:<name>"])` to persist new facts
+4. `knowledge_read(id=...)` for entries worth reading
+5. `docs_search` / `docs_read` if CHM documentation is relevant
+6. Answer using `system_prompt` as persona
+7. `knowledge_write(tags=["agent:<name>"])` to persist new facts
 
 **`knowledge_tags`** — optional list of *extra* tag scopes searched in addition to
 the agent's own `agent:<name>` namespace. Use it when an agent should also draw

@@ -90,43 +90,25 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 	@mcp.tool
 	async def knowledge_read(
-		id: str | None = None,
-		owner: str | None = None,
-		tag: str | None = None,
-		limit: int = 50,
-		offset: int = 0,
+		id: str,
 	) -> str:
-		"""Read knowledge entries — fetch a single entry by ID or list entries.
+		"""Fetch a single knowledge entry by ID, including full content.
 
-		Behaviour depends on which fields you provide:
-
-		- id provided → returns that single entry with full content. Requires visibility
-		  (own entry or shared=true).
-		- id omitted → lists entries visible to the current user (own entries and shared
-		  entries from others) with metadata only (id, title, tags, owner, updated_at —
-		  no content), optionally filtered by owner and/or tag, paginated via limit/offset.
+		Use knowledge_search to discover entry IDs.
 
 		Args:
-		    id: Entry ID. Provide to fetch a specific entry; omit to list.
-		    owner: Filter list results to entries from this owner (list mode only).
-		    tag: Filter list results to entries containing this tag (list mode only).
-		    limit: Max entries to return when listing.
-		    offset: Entries to skip when listing.
+		    id: Entry ID.
 		"""
 		user = get_github_login()
 		caller = None if user == "anonymous" else user
 		await store.migrate()
 
-		if id is not None:
-			entry = await store.get(id)
-			if entry is None:
-				raise KeyError(f"Knowledge entry '{id}' not found.")
-			if caller is not None and entry["owner"] != caller and not entry.get("shared"):
-				raise PermissionError(f"Knowledge entry '{id}' not found or access denied.")
-			return json.dumps(entry, indent=2)
-
-		entries = await store.list_entries(owner=owner, tag=tag, limit=limit, offset=offset, caller=caller)
-		return json.dumps(entries, indent=2)
+		entry = await store.get(id)
+		if entry is None:
+			raise KeyError(f"Knowledge entry '{id}' not found.")
+		if caller is not None and entry["owner"] != caller and not entry.get("shared"):
+			raise PermissionError(f"Knowledge entry '{id}' not found or access denied.")
+		return json.dumps(entry, indent=2)
 
 	@mcp.tool
 	async def knowledge_write(

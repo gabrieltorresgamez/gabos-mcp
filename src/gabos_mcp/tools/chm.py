@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 	from fastmcp import FastMCP
 
 
-def register(mcp: FastMCP) -> None:  # noqa: C901
+def register(mcp: FastMCP) -> None:
 	"""Register docs tools on the given FastMCP instance."""
 	apps = json.loads(os.environ.get("GABOS_CHM_FILES", "{}"))
 	cache_dir = os.environ.get("GABOS_CHM_CACHE_DIR", str(user_cache_path("gabos-mcp") / "chm"))
@@ -37,71 +37,18 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		return json.dumps(results, indent=2)
 
 	@mcp.tool
-	async def docs_read(  # noqa: PLR0911
-		app: str | None = None,
-		source: str | None = None,
-		page_path: str | None = None,
-		limit: int = 50,
-		offset: int = 0,
+	async def docs_read(
+		app: str,
+		source: str,
+		page_path: str,
 	) -> str:
-		"""Read documentation structure or content.
+		"""Read the full Markdown content of a documentation page.
 
-		Behaviour depends on which fields you provide:
-
-		- No fields → returns list of configured application names.
-		- app only → returns list of sources within that app.
-		- app + source → returns list of pages in that source (paginated via limit/offset).
-		- app + source + page_path → returns the full Markdown content of that page.
-
-		Use docs_search for free-text queries — this tool is for navigation and exact-path
-		retrieval, not full-text search.
-
-		Invalid combinations (e.g. page_path without source, source without app) return an
-		error message describing the expected fields.
+		Use docs_search to discover app, source, and page_path values.
 
 		Args:
-		    app: Application name (e.g. "OMNITRACKER"). Omit to list all apps.
-		    source: Source name within the app. Requires app.
-		    page_path: Page path within the source. Requires app and source.
-		    limit: Max pages to return when listing (ignored when reading a page).
-		    offset: Pages to skip when listing (ignored when reading a page).
+		    app: Application name (e.g. "OMNITRACKER").
+		    source: Source name within the app.
+		    page_path: Page path within the source.
 		"""
-		# Validate field combinations
-		if page_path and not source:
-			return json.dumps(
-				{
-					"error": "page_path requires source. "
-					"Provide app + source + page_path to read a page, or app + source to list pages."
-				}
-			)
-		if source and not app:
-			return json.dumps(
-				{
-					"error": "source requires app. "
-					"Provide app + source to list pages, or app + source + page_path to read a page."
-				}
-			)
-
-		if app is None:
-			# List all apps
-			apps_list = extractor.list_apps()
-			if not apps_list:
-				return json.dumps({"message": "No apps configured. Set the GABOS_CHM_FILES environment variable."})
-			return json.dumps(apps_list, indent=2)
-
-		if source is None:
-			# List sources within app
-			sources = extractor.list_sources(app)
-			if not sources:
-				return json.dumps({"message": f"No sources found for app '{app}'."})
-			return json.dumps(sources, indent=2)
-
-		if page_path is None:
-			# List pages within source
-			pages = await extractor.list_pages(app, source, limit=limit, offset=offset)
-			if not pages:
-				return json.dumps({"message": f"No pages found in '{app}/{source}'."})
-			return json.dumps(pages, indent=2)
-
-		# Read page content
 		return await extractor.read_page(app, source, page_path)

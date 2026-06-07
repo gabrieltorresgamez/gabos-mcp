@@ -180,6 +180,13 @@ class AgentStore:
 		row = await cursor.fetchone()
 		return self._row_to_agent(row) if row else None
 
+	async def get_by_id(self, id: str) -> Agent | None:
+		"""Return an agent by UUID only, or None if not found."""
+		conn = await self._connect()
+		cursor = await conn.execute("SELECT * FROM agents WHERE id = ?", (id,))
+		row = await cursor.fetchone()
+		return self._row_to_agent(row) if row else None
+
 	async def list_agents(self, caller: str | None = None) -> list[Agent]:
 		"""Return agents visible to the caller, ordered by name.
 
