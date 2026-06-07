@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableRow]:
 	rows = []
-	for tool, count in stats["top_tools"]:
+	for tool, count in stats["tools"]:
 		errors = stats["tool_errors"].get(tool, 0)
 		d = stats["duration_stats"].get(tool, {})
 		rows.append(
@@ -37,16 +37,16 @@ def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableR
 
 
 def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
-	tool_bar_data = [{"tool": t, "calls": c} for t, c in stats["top_tools"]]
-	caller_bar_data = [{"caller": c, "calls": n} for c, n in stats["top_callers"]]
+	tool_bar_data = [{"tool": t, "calls": c} for t, c in stats["tools"]]
+	caller_bar_data = [{"caller": c, "calls": n} for c, n in stats["callers"]]
 	view = Column(
 		children=[
 			Heading(content="Tool Call Statistics"),
 			Row(
 				children=[
 					Metric(label="Total Calls", value=str(stats["total"])),
-					Metric(label="Unique Tools", value=str(len(stats["top_tools"]))),
-					Metric(label="Unique Callers", value=str(len(stats["top_callers"]))),
+					Metric(label="Unique Tools", value=str(len(stats["tools"]))),
+					Metric(label="Unique Callers", value=str(len(stats["callers"]))),
 				],
 				gap=4,
 			),

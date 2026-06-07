@@ -8,7 +8,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from fastmcp import FastMCP
-from fastmcp.server.middleware.timing import DetailedTimingMiddleware
 from starlette.responses import JSONResponse
 
 from gabos_mcp.tools import agents, chm, knowledge, telemetry
@@ -37,7 +36,6 @@ async def _lifespan(_server: FastMCP) -> AsyncGenerator[None]:
 
 auth = build_github_auth()
 mcp = FastMCP("gabos-mcp", lifespan=_lifespan, **({"auth": auth} if auth else {}))
-mcp.add_middleware(DetailedTimingMiddleware())
 mcp.add_middleware(TelemetryMiddleware())
 
 agents.register(mcp)

@@ -56,6 +56,7 @@ class AgentStore:
 		self._db_path = Path(db_path).expanduser()
 		self._db_path.parent.mkdir(parents=True, exist_ok=True)
 		self._conn: aiosqlite.Connection | None = None
+		self._migrated = False
 
 	async def _connect(self) -> aiosqlite.Connection:
 		if self._conn is None:
@@ -71,6 +72,8 @@ class AgentStore:
 
 	async def migrate(self) -> None:
 		"""Create tables if they do not exist, and apply incremental schema changes."""
+		if self._migrated:
+			return
 		conn = await self._connect()
 		await conn.execute("""
 			CREATE TABLE IF NOT EXISTS agents (
@@ -92,6 +95,7 @@ class AgentStore:
 		if await self._column_exists("agents", "model"):
 			await conn.execute("ALTER TABLE agents DROP COLUMN model")
 		await conn.commit()
+		self._migrated = True
 
 	@staticmethod
 	def _row_to_agent(row: aiosqlite.Row) -> Agent:

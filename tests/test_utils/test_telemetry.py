@@ -216,10 +216,10 @@ def test_duration_stats_odd_count():
 
 
 def test_compute_stats_empty():
-	stats = _compute_stats([], 5)
+	stats = _compute_stats([])
 	assert stats["total"] == 0
-	assert stats["top_tools"] == []
-	assert stats["top_callers"] == []
+	assert stats["tools"] == []
+	assert stats["callers"] == []
 
 
 def test_compute_stats_counts():
@@ -228,10 +228,10 @@ def test_compute_stats_counts():
 		"ts=2026-01-01T00:00:01Z tool=foo caller=alice duration_ms=2.00 ok=false",
 		"ts=2026-01-01T00:00:02Z tool=bar caller=bob duration_ms=3.00 ok=true",
 	]
-	stats = _compute_stats(lines, 10)
+	stats = _compute_stats(lines)
 	assert stats["total"] == 3
-	assert stats["top_tools"][0] == ("foo", 2)
-	assert stats["top_callers"][0] == ("alice", 2)
+	assert stats["tools"][0] == ("foo", 2)
+	assert stats["callers"][0] == ("alice", 2)
 	assert stats["tool_errors"]["foo"] == 1
 	assert "bar" not in stats["tool_errors"]
 	assert stats["duration_stats"]["foo"]["mean"] == pytest.approx(1.5)
@@ -240,7 +240,7 @@ def test_compute_stats_counts():
 
 def test_compute_stats_skips_blank_lines():
 	lines = ["", "  ", "ts=2026-01-01T00:00:00Z tool=x caller=a duration_ms=1.00 ok=true"]
-	stats = _compute_stats(lines, 5)
+	stats = _compute_stats(lines)
 	assert stats["total"] == 1
 
 
@@ -252,7 +252,7 @@ def test_compute_stats_skips_multiline_error_continuation():
 		"continuation line\n",
 		'another line"\n',
 	]
-	stats = _compute_stats(lines, 10)
+	stats = _compute_stats(lines)
 	assert stats["total"] == 1
-	assert stats["top_tools"][0] == ("foo", 1)
-	assert "unknown" not in dict(stats["top_tools"])
+	assert stats["tools"][0] == ("foo", 1)
+	assert "unknown" not in dict(stats["tools"])

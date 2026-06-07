@@ -29,6 +29,7 @@ class KnowledgeStore:
 		self._db_path = Path(db_path).expanduser()
 		self._db_path.parent.mkdir(parents=True, exist_ok=True)
 		self._conn: aiosqlite.Connection | None = None
+		self._migrated = False
 
 	async def _connect(self) -> aiosqlite.Connection:
 		if self._conn is None:
@@ -44,6 +45,8 @@ class KnowledgeStore:
 
 	async def migrate(self) -> None:
 		"""Create the necessary database tables if they do not exist."""
+		if self._migrated:
+			return
 		conn = await self._connect()
 		await conn.execute("""
 			CREATE TABLE IF NOT EXISTS knowledge (
@@ -90,6 +93,7 @@ class KnowledgeStore:
 		# Populate FTS index for any existing rows (idempotent rebuild).
 		await conn.execute("INSERT INTO knowledge_fts(knowledge_fts) VALUES('rebuild')")
 		await conn.commit()
+		self._migrated = True
 
 	@staticmethod
 	def _row_to_dict(row: aiosqlite.Row) -> dict:

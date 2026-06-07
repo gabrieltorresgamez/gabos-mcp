@@ -142,10 +142,9 @@ async def log_tool_call(
 			await f.write(line)
 
 
-def _compute_stats(lines: list[str], top_n: int) -> dict[str, Any]:
+def _compute_stats(lines: list[str]) -> dict[str, Any]:
 	tool_counts: Counter[str] = Counter()
 	caller_counts: Counter[str] = Counter()
-	caller_tool: defaultdict[str, Counter[str]] = defaultdict(Counter)
 	tool_errors: Counter[str] = Counter()
 	tool_durations: defaultdict[str, list[float]] = defaultdict(list)
 
@@ -160,27 +159,22 @@ def _compute_stats(lines: list[str], top_n: int) -> dict[str, Any]:
 		ok = rec.get("ok", "true") == "true"
 		tool_counts[tool] += 1
 		caller_counts[caller] += 1
-		caller_tool[caller][tool] += 1
 		if not ok:
 			tool_errors[tool] += 1
 		dur = _try_float(rec.get("duration_ms", ""))
 		if dur is not None:
 			tool_durations[tool].append(dur)
 
-	per_caller: dict[str, list[tuple[str, int]]] = {
-		c: caller_tool[c].most_common(top_n) for c, _ in caller_counts.most_common(top_n)
-	}
 	return {
 		"total": sum(tool_counts.values()),
-		"top_tools": tool_counts.most_common(top_n),
-		"top_callers": caller_counts.most_common(top_n),
-		"per_caller": per_caller,
+		"tools": tool_counts.most_common(),
+		"callers": caller_counts.most_common(),
 		"tool_errors": dict(tool_errors.most_common()),
 		"duration_stats": {t: _duration_stats(ds) for t, ds in tool_durations.items()},
 	}
 
 
-async def get_stats_data(top_n: int = 10) -> dict[str, Any] | None:
+async def get_stats_data() -> dict[str, Any] | None:
 	"""Read the telemetry log and return the raw stats dict.
 
 	Returns:
@@ -193,7 +187,7 @@ async def get_stats_data(top_n: int = 10) -> dict[str, Any] | None:
 		lines = await f.readlines()
 	if not lines:
 		return None
-	return _compute_stats(lines, top_n)
+	return _compute_stats(lines)
 
 
 class TelemetryMiddleware(Middleware):
