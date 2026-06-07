@@ -45,21 +45,15 @@ class TestAgentCreate:
 
 
 @pytest.mark.asyncio
-class TestAgentGet:
-	async def test_get_by_name(self, store):
-		created = await store.create(owner="alice", name="myagent", description="D", system_prompt="P")
-		found = await store.get("myagent")
-		assert found is not None
-		assert found.id == created.id
-
+class TestAgentGetById:
 	async def test_get_by_id(self, store):
 		created = await store.create(owner="alice", name="myagent", description="D", system_prompt="P")
-		found = await store.get(created.id)
+		found = await store.get_by_id(created.id)
 		assert found is not None
 		assert found.name == "myagent"
 
 	async def test_returns_none_for_missing(self, store):
-		assert await store.get("nonexistent") is None
+		assert await store.get_by_id("00000000-0000-0000-0000-000000000000") is None
 
 
 @pytest.mark.asyncio
@@ -97,46 +91,46 @@ class TestAgentList:
 @pytest.mark.asyncio
 class TestAgentUpdate:
 	async def test_owner_can_update_description(self, store):
-		await store.create(owner="alice", name="ag", description="Old", system_prompt="P")
-		updated = await store.update("ag", owner="alice", description="New")
+		agent = await store.create(owner="alice", name="ag", description="Old", system_prompt="P")
+		updated = await store.update(agent.id, owner="alice", description="New")
 		assert updated.description == "New"
 		assert updated.system_prompt == "P"
 
 	async def test_owner_can_update_shared_flag(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
-		updated = await store.update("ag", owner="alice", shared=True)
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P", shared=False)
+		updated = await store.update(agent.id, owner="alice", shared=True)
 		assert updated.shared is True
 
 	async def test_non_owner_cannot_update(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with pytest.raises(PermissionError, match="only edit your own"):
-			await store.update("ag", owner="bob", description="X")
+			await store.update(agent.id, owner="bob", description="X")
 
 	async def test_partial_update_knowledge_tags(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		updated = await store.update("ag", owner="alice", knowledge_tags=["t1", "t2"])
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		updated = await store.update(agent.id, owner="alice", knowledge_tags=["t1", "t2"])
 		assert updated.knowledge_tags == ["t1", "t2"]
 
 	async def test_raises_on_missing_agent(self, store):
 		with pytest.raises(KeyError, match="not found"):
-			await store.update("ghost", owner="alice", description="X")
+			await store.update("00000000-0000-0000-0000-000000000000", owner="alice", description="X")
 
 
 @pytest.mark.asyncio
 class TestAgentDelete:
 	async def test_owner_can_delete(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
-		await store.delete("ag", owner="alice")
-		assert await store.get("ag") is None
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		await store.delete(agent.id, owner="alice")
+		assert await store.get_by_id(agent.id) is None
 
 	async def test_non_owner_cannot_delete(self, store):
-		await store.create(owner="alice", name="ag", description="D", system_prompt="P")
+		agent = await store.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with pytest.raises(PermissionError, match="only delete your own"):
-			await store.delete("ag", owner="bob")
+			await store.delete(agent.id, owner="bob")
 
 	async def test_raises_on_missing(self, store):
 		with pytest.raises(KeyError, match="not found"):
-			await store.delete("ghost", owner="alice")
+			await store.delete("00000000-0000-0000-0000-000000000000", owner="alice")
 
 
 @pytest.mark.asyncio

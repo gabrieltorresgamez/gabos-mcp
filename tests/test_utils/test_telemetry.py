@@ -13,7 +13,6 @@ from gabos_mcp.utils.telemetry import (
 	get_stats_data,
 	is_admin,
 	log_tool_call,
-	read_stats,
 )
 
 # ── _format_logfmt ───────────────────────────────────────────────────────────
@@ -119,7 +118,7 @@ def test_get_admin_users_strips_whitespace(monkeypatch):
 	assert get_admin_users() == {"alice", "bob"}
 
 
-# ── log_tool_call / read_stats ───────────────────────────────────────────────
+# ── log_tool_call ────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -159,31 +158,6 @@ async def test_log_tool_call_appends(tmp_path, monkeypatch):
 
 	lines = [ln for ln in log_file.read_text().splitlines() if ln]
 	assert len(lines) == 2
-
-
-@pytest.mark.asyncio
-async def test_read_stats_no_file(tmp_path, monkeypatch):
-	monkeypatch.setenv("GABOS_TELEMETRY_LOG", str(tmp_path / "missing.log"))
-	result = await read_stats()
-	assert "No telemetry data yet" in result
-
-
-@pytest.mark.asyncio
-async def test_read_stats_aggregates(tmp_path, monkeypatch):
-	log_file = tmp_path / "calls.log"
-	monkeypatch.setenv("GABOS_TELEMETRY_LOG", str(log_file))
-
-	await log_tool_call("knowledge_search", "alice", 10.0, True)
-	await log_tool_call("knowledge_search", "alice", 12.0, True)
-	await log_tool_call("agent_read", "bob", 5.0, True)
-	await log_tool_call("agent_read", "alice", 6.0, False, "err")
-
-	result = await read_stats(top_n=5)
-	assert "knowledge_search: 2" in result
-	assert "agent_read: 2" in result
-	assert "alice: 3" in result
-	assert "bob: 1" in result
-	assert "1 error" in result
 
 
 # ── get_stats_data ───────────────────────────────────────────────────────────

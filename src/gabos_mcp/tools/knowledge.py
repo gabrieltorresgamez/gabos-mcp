@@ -183,6 +183,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		Note: knowledge entries tagged to an agent (agent:<name>) are stored
 		independently of the agent. Deleting the agent does NOT delete them.
 		Remove them explicitly here when no longer needed.
+
+		Args:
+		    id: Entry UUID (from knowledge_search or knowledge_write).
 		"""
 		user = get_github_login()
 		if user == "anonymous":

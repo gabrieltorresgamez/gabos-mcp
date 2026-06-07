@@ -180,28 +180,6 @@ def _compute_stats(lines: list[str], top_n: int) -> dict[str, Any]:
 	}
 
 
-def _render_stats(stats: dict[str, Any], top_n: int) -> str:
-	out = [f"Tool Call Statistics (top {top_n})", "=" * 44, f"Total calls: {stats['total']}"]
-
-	out.append("\nTop tools by call count:")
-	for tool, count in stats["top_tools"]:
-		err = stats["tool_errors"].get(tool, 0)
-		err_str = f" ({err} error{'s' if err != 1 else ''})" if err else ""
-		out.append(f"  {tool}: {count}{err_str}")
-
-	out.append("\nTop callers:")
-	for caller, count in stats["top_callers"]:
-		out.append(f"  {caller}: {count}")
-
-	out.append("\nPer-caller breakdown:")
-	for caller, tool_stats in stats["per_caller"].items():
-		out.append(f"  {caller}:")
-		for tool, count in tool_stats:
-			out.append(f"    {tool}: {count}")
-
-	return "\n".join(out)
-
-
 async def get_stats_data(top_n: int = 10) -> dict[str, Any] | None:
 	"""Read the telemetry log and return the raw stats dict.
 
@@ -216,18 +194,6 @@ async def get_stats_data(top_n: int = 10) -> dict[str, Any] | None:
 	if not lines:
 		return None
 	return _compute_stats(lines, top_n)
-
-
-async def read_stats(top_n: int = 10) -> str:
-	"""Read the telemetry log and return a formatted stats report.
-
-	Returns:
-	    Human-readable statistics text, or a message when no data exists yet.
-	"""
-	stats = await get_stats_data(top_n)
-	if stats is None:
-		return "No telemetry data yet."
-	return _render_stats(stats, top_n)
 
 
 class TelemetryMiddleware(Middleware):

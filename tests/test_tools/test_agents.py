@@ -158,18 +158,18 @@ class TestAgentWrite:
 
 	async def test_update_mode(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="Old", system_prompt="P")
+		agent = await as_.create(owner="alice", name="ag", description="Old", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_write"](mode="update", name_or_id="ag", description="New"))
+			result = json.loads(await fns["agent_write"](mode="update", id=agent.id, description="New"))
 		assert result["description"] == "New"
 
 	async def test_update_owner_only(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
+		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
-			await fns["agent_write"](mode="update", name_or_id="ag", description="X")
+			await fns["agent_write"](mode="update", id=agent.id, description="X")
 
-	async def test_update_requires_name_or_id(self, tools):
+	async def test_update_requires_id(self, tools):
 		fns, as_, ks = tools
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
 			result = json.loads(await fns["agent_write"](mode="update", description="X"))
@@ -194,19 +194,19 @@ class TestAgentWrite:
 class TestAgentDelete:
 	async def test_owner_can_delete_agent(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
+		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_delete"](name_or_id="ag"))
-		assert result["deleted"] == "ag"
-		assert await as_.get("ag") is None
+			result = json.loads(await fns["agent_delete"](id=agent.id))
+		assert result["deleted"] == agent.id
+		assert await as_.get_by_id(agent.id) is None
 
 	async def test_non_owner_denied(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
+		agent = await as_.create(owner="alice", name="ag", description="D", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
-			await fns["agent_delete"](name_or_id="ag")
+			await fns["agent_delete"](id=agent.id)
 
 	async def test_anon_denied(self, tools):
 		fns, as_, ks = tools
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="anonymous"), pytest.raises(PermissionError):
-			await fns["agent_delete"](name_or_id="ag")
+			await fns["agent_delete"](id="00000000-0000-0000-0000-000000000000")

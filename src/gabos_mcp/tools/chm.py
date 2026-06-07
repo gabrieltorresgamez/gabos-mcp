@@ -25,11 +25,13 @@ def register(mcp: FastMCP) -> None:
 		"""Search documentation pages matching a query.
 
 		Returns JSON array of results with app, source, title, path, and score.
-		Use app, source, and path with docs_read to read the full content.
-		Optionally scope to a specific app and/or source.
+		Use the returned app, source, and path values with docs_read to fetch full content.
 
-		Use this tool for free-text queries. To browse apps, sources, or pages by
-		path, use docs_read instead.
+		Args:
+		    query: Free-text search terms.
+		    app: Restrict results to a specific application (e.g. "OMNITRACKER").
+		    source: Restrict results to a specific source within the app.
+		    limit: Maximum results to return (default 30).
 		"""
 		results = await extractor.search(query, app=app, source=source, limit=limit)
 		if not results:

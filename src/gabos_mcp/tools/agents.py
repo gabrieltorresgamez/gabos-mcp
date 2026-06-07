@@ -27,7 +27,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 	) -> str:
 		"""List agents visible to the current user, optionally filtered by a query.
 
-		Returns name, owner, shared, and description for each matching agent.
+		Returns id, name, owner, shared, and description for each matching agent.
 		Use agent_read(id=...) to fetch full details including system_prompt.
 
 		Args:
@@ -88,7 +88,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 	@mcp.tool
 	async def agent_write(
 		mode: Literal["create", "update"],
-		name_or_id: str | None = None,
+		id: str | None = None,
 		name: str | None = None,
 		description: str | None = None,
 		system_prompt: str | None = None,
@@ -99,18 +99,19 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		Use mode="create" to define a new agent, mode="update" to modify an existing one.
 
-		mode="create": name, description, and system_prompt are required; name_or_id must
+		mode="create": name, description, and system_prompt are required; id must
 		  be omitted; shared defaults to false.
 
-		mode="update": name_or_id is required; all other fields are partial overrides
-		  (omit to keep current value); only the agent owner may update.
+		mode="update": id is required; description, system_prompt, knowledge_tags,
+		  and shared are partial overrides (omit to keep current value); only the
+		  agent owner may update. Agent names are immutable.
 
 		To attach knowledge to an agent, use knowledge_write with tags=["agent:<name>"].
 
 		Args:
 		    mode: "create" to add a new agent, "update" to modify an existing one.
-		    name_or_id: Agent name or UUID. Required for update; omit for create.
-		    name: Agent slug (e.g. "omnitracker"). Required for create.
+		    id: Agent UUID. Required for update; omit for create.
+		    name: Agent slug (e.g. "omnitracker"). Required for create; immutable after creation.
 		    description: One-line description. Required for create.
 		    system_prompt: Full persona and instructions. Required for create.
 		    knowledge_tags: Optional extra tag scopes the agent searches in addition
@@ -124,8 +125,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		await agent_store.migrate()
 
 		if mode == "create":
-			if name_or_id is not None:
-				return json.dumps({"error": "name_or_id must be omitted for mode='create'. Use name instead."})
+			if id is not None:
+				return json.dumps({"error": "id must be omitted for mode='create'."})
 			if not name:
 				return json.dumps({"error": "name is required for mode='create'."})
 			if not description:
@@ -143,10 +144,10 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 			)
 
 		elif mode == "update":
-			if not name_or_id:
-				return json.dumps({"error": "name_or_id is required for mode='update'."})
+			if not id:
+				return json.dumps({"error": "id is required for mode='update'."})
 			agent = await agent_store.update(
-				name_or_id=name_or_id,
+				id=id,
 				owner=user,
 				description=description,
 				system_prompt=system_prompt,
@@ -162,7 +163,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 	# ── Delete ───────────────────────────────────────────────────────────────────
 
 	@mcp.tool
-	async def agent_delete(name_or_id: str) -> str:
+	async def agent_delete(id: str) -> str:
 		"""Delete an agent. Owner-only.
 
 		Deletes the agent definition entirely. Knowledge entries tagged to the
@@ -171,12 +172,12 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		they are no longer needed.
 
 		Args:
-		    name_or_id: Agent name or UUID.
+		    id: Agent UUID.
 		"""
 		user = get_github_login()
 		if user == "anonymous":
 			raise PermissionError("Authentication required to delete agents.")
 		await agent_store.migrate()
 
-		await agent_store.delete(name_or_id, owner=user)
-		return json.dumps({"deleted": name_or_id})
+		await agent_store.delete(id, owner=user)
+		return json.dumps({"deleted": id})

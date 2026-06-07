@@ -170,16 +170,6 @@ class AgentStore:
 			updated_at=now,
 		)
 
-	async def get(self, name_or_id: str) -> Agent | None:
-		"""Return an agent by name or ID, or None if not found."""
-		conn = await self._connect()
-		cursor = await conn.execute(
-			"SELECT * FROM agents WHERE name = ? OR id = ?",
-			(name_or_id, name_or_id),
-		)
-		row = await cursor.fetchone()
-		return self._row_to_agent(row) if row else None
-
 	async def get_by_id(self, id: str) -> Agent | None:
 		"""Return an agent by UUID only, or None if not found."""
 		conn = await self._connect()
@@ -208,7 +198,7 @@ class AgentStore:
 
 	async def update(
 		self,
-		name_or_id: str,
+		id: str,
 		owner: str,
 		description: str | None = None,
 		system_prompt: str | None = None,
@@ -218,7 +208,7 @@ class AgentStore:
 		"""Update an agent definition (partial update). Only the owner may update.
 
 		Args:
-		    name_or_id: Agent name or UUID.
+		    id: Agent UUID.
 		    owner: GitHub login of the caller (must match the agent's owner).
 		    description: New description, or None to keep existing.
 		    system_prompt: New system prompt, or None to keep existing.
@@ -232,9 +222,9 @@ class AgentStore:
 		    KeyError: If the agent does not exist.
 		    PermissionError: If the caller is not the owner.
 		"""
-		agent = await self.get(name_or_id)
+		agent = await self.get_by_id(id)
 		if agent is None:
-			raise KeyError(f"Agent '{name_or_id}' not found.")
+			raise KeyError(f"Agent '{id}' not found.")
 		if agent.owner != owner:
 			raise PermissionError("You can only edit your own agents.")
 
@@ -270,20 +260,20 @@ class AgentStore:
 			updated_at=now,
 		)
 
-	async def delete(self, name_or_id: str, owner: str) -> None:
+	async def delete(self, id: str, owner: str) -> None:
 		"""Delete an agent (cascade to doc refs). Only the owner may delete.
 
 		Args:
-		    name_or_id: Agent name or UUID.
+		    id: Agent UUID.
 		    owner: GitHub login of the caller (must match the agent's owner).
 
 		Raises:
 		    KeyError: If the agent does not exist.
 		    PermissionError: If the caller is not the owner.
 		"""
-		agent = await self.get(name_or_id)
+		agent = await self.get_by_id(id)
 		if agent is None:
-			raise KeyError(f"Agent '{name_or_id}' not found.")
+			raise KeyError(f"Agent '{id}' not found.")
 		if agent.owner != owner:
 			raise PermissionError("You can only delete your own agents.")
 		conn = await self._connect()
