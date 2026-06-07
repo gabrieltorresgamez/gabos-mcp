@@ -54,10 +54,7 @@ def _tool_bar_data_and_series(
 	for tool, count in tools:
 		s = _tool_suffix(tool)
 		active.add(s)
-		row: dict[str, Any] = {"tool": tool}
-		for sf in all_suffixes:
-			row[sf] = count if sf == s else 0
-		data.append(row)
+		data.append({"tool": tool, s: count})
 	series = [
 		ChartSeries(dataKey=sf, label=sf.lstrip("_") or "other", color=colors[sf])
 		for sf in all_suffixes
