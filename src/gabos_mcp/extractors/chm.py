@@ -407,24 +407,6 @@ class ChmExtractor:
 			content = await f.read()
 		return content.strip()
 
-	async def list_pages(self, app: str, source: str, limit: int = 50, offset: int = 0) -> list[dict]:
-		"""List pages for a CHM source with pagination.
-
-		Args:
-		    app: Application name.
-		    source: CHM source name within the app.
-		    limit: Maximum number of pages to return.
-		    offset: Number of pages to skip.
-
-		Returns:
-		    List of dicts with keys: title, path.
-		"""
-		self._validate_source(app, source)
-		await self._ensure_ready(app, source)
-
-		index_dir = self._cache_path(app, source) / "index"
-		return await SearchIndex(index_dir).list_documents(limit=limit, offset=offset)
-
 	def clear_cache(self, app: str | None = None, source: str | None = None) -> list[str]:
 		"""Delete cached data so it will be rebuilt on next access.
 
@@ -461,16 +443,3 @@ class ChmExtractor:
 			self._ready.discard(self._cache_key(a, s))
 
 		return cleared
-
-	def list_apps(self) -> list[str]:
-		"""Return sorted list of configured app names."""
-		return sorted(self._apps.keys())
-
-	def list_sources(self, app: str) -> list[str]:
-		"""Return sorted list of source names for an app.
-
-		Args:
-		    app: Application name.
-		"""
-		self._validate_app(app)
-		return sorted(self._apps[app].keys())

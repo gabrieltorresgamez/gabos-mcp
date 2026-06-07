@@ -143,42 +143,6 @@ class TestReadPage:
 			await extractor_with_html.read_page("testapp", "manual", "nonexistent.md")
 
 
-class TestListPages:
-	@pytest.mark.asyncio
-	async def test_lists_all_pages(self, extractor_with_html):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		pages = await extractor_with_html.list_pages("testapp", "manual", limit=100)
-		assert len(pages) == 3
-
-	@pytest.mark.asyncio
-	async def test_pagination(self, extractor_with_html):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		page1 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=0)
-		page2 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=1)
-		assert len(page1) == 1
-		assert len(page2) == 1
-		assert page1[0]["path"] != page2[0]["path"]
-
-
-class TestListApps:
-	def test_lists_configured_apps(self, extractor_with_html):
-		assert extractor_with_html.list_apps() == ["testapp"]
-
-	def test_empty_when_no_apps(self, tmp_cache):
-		ext = ChmExtractor(apps={}, cache_dir=tmp_cache)
-		assert ext.list_apps() == []
-
-
-class TestListSources:
-	def test_lists_sources_for_app(self, extractor_with_html):
-		assert extractor_with_html.list_sources("testapp") == ["manual"]
-
-	def test_unknown_app_raises(self, tmp_cache):
-		ext = ChmExtractor(apps={}, cache_dir=tmp_cache)
-		with pytest.raises(ValueError, match="Unknown app"):
-			ext.list_sources("nonexistent")
-
-
 class TestValidation:
 	@pytest.mark.asyncio
 	async def test_unknown_app_raises(self, tmp_cache):
