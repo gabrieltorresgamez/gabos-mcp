@@ -22,7 +22,7 @@ _SUFFIX_META: dict[str, tuple[str, str]] = {
 	"_search": ("secondary",   "var(--secondary-foreground)"),
 	"_write":  ("warning",     "var(--warning)"),
 	"_delete": ("destructive", "var(--destructive)"),
-	"_stats":  ("default",     "var(--primary)"),
+	"_stats":  ("success",     "var(--success)"),
 }
 _OTHER: tuple[str, str] = ("outline", "var(--muted-foreground)")
 _SUFFIX_ORDER = {s: i for i, s in enumerate([*_SUFFIX_META, "_other"])}
