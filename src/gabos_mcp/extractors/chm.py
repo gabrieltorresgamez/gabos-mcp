@@ -165,6 +165,33 @@ def _clean_markdown(text: str) -> str:
 	return _UNICODE_BULLET_RE.sub(r"\1- ", joined)
 
 
+def _read_md(md_file: Path, md_dir: Path) -> tuple[str, str, str]:
+	text = md_file.read_text(encoding="utf-8")
+	rel_path = str(md_file.relative_to(md_dir))
+	title = rel_path
+	for raw_line in text.splitlines():
+		stripped = raw_line.strip()
+		if stripped:
+			title = stripped.lstrip("#").strip()
+			break
+	return rel_path, title, text
+
+
+def _convert_file(html_file: Path, html_dir: Path, md_dir: Path, converter: html2text.HTML2Text) -> None:
+	# Read as bytes so lxml can detect charset from <meta charset> (handles cp1252 CHMs)
+	raw_bytes = html_file.read_bytes()
+	soup = BeautifulSoup(raw_bytes, "lxml")
+	for tag in soup.find_all(["script", "style", "nav", "header", "footer"]):
+		tag.decompose()
+	markdown = converter.handle(str(soup))
+	markdown = _clean_markdown(markdown)
+	markdown = _fix_links(markdown)
+	rel_path = html_file.relative_to(html_dir).with_suffix(".md")
+	out_path = md_dir / rel_path
+	out_path.parent.mkdir(parents=True, exist_ok=True)
+	out_path.write_text(markdown, encoding="utf-8")
+
+
 class ChmExtractor:
 	"""Manages multiple CHM files grouped by application."""
 
@@ -291,21 +318,7 @@ class ChmExtractor:
 		html_files = list(html_dir.rglob("*.htm")) + list(html_dir.rglob("*.html"))
 		for html_file in html_files:
 			try:
-				# Read as bytes so lxml can detect charset from <meta charset> (handles cp1252 CHMs)
-				raw_bytes = html_file.read_bytes()
-				soup = BeautifulSoup(raw_bytes, "lxml")
-
-				for tag in soup.find_all(["script", "style", "nav", "header", "footer"]):
-					tag.decompose()
-
-				markdown = converter.handle(str(soup))
-				markdown = _clean_markdown(markdown)
-				markdown = _fix_links(markdown)
-
-				rel_path = html_file.relative_to(html_dir).with_suffix(".md")
-				out_path = md_dir / rel_path
-				out_path.parent.mkdir(parents=True, exist_ok=True)
-				out_path.write_text(markdown, encoding="utf-8")
+				_convert_file(html_file, html_dir, md_dir, converter)
 			except Exception:
 				logger.warning("Failed to convert %s, skipping", html_file, exc_info=True)
 
@@ -317,18 +330,7 @@ class ChmExtractor:
 		def documents() -> Iterator[tuple[str, str, str]]:
 			for md_file in md_dir.rglob("*.md"):
 				try:
-					text = md_file.read_text(encoding="utf-8")
-					rel_path = str(md_file.relative_to(md_dir))
-
-					# Extract title from first non-empty line
-					title = rel_path
-					for raw_line in text.splitlines():
-						stripped = raw_line.strip()
-						if stripped:
-							title = stripped.lstrip("#").strip()
-							break
-
-					yield rel_path, title, text
+					yield _read_md(md_file, md_dir)
 				except Exception:
 					logger.warning("Failed to read %s for indexing, skipping", md_file, exc_info=True)
 

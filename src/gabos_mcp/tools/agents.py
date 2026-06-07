@@ -156,7 +156,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 			)
 
 		else:
-			return json.dumps({"error": f"Unknown mode '{mode}'. Use 'create' or 'update'."})
+			raise ValueError(f"Unknown mode '{mode}'. Use 'create' or 'update'.")
 
 		return json.dumps(agent.to_dict(), indent=2)
 

@@ -38,6 +38,32 @@ class SearchIndex:
 			self._conn = await aiosqlite.connect(self._db_path)
 		return self._conn
 
+	@staticmethod
+	async def _setup_table(con: aiosqlite.Connection) -> None:
+		await con.execute("PRAGMA synchronous = OFF;")
+		await con.execute("PRAGMA journal_mode = MEMORY;")
+		await con.execute(f"DROP TABLE IF EXISTS {_TABLE}")
+		await con.execute(
+			f'CREATE VIRTUAL TABLE {_TABLE} USING fts5(path UNINDEXED, title, content, tokenize="trigram")'
+		)
+
+	@staticmethod
+	async def _insert_documents(con: aiosqlite.Connection, documents: Iterable[tuple[str, str, str]]) -> None:
+		batch = []
+		for path, title, content in documents:
+			batch.append((path, title, content))
+			if len(batch) >= _BATCH_SIZE:
+				try:
+					await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
+				except Exception:
+					logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
+				batch.clear()
+		if batch:
+			try:
+				await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
+			except Exception:
+				logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
+
 	async def build(self, documents: Iterable[tuple[str, str, str]]) -> None:
 		"""Build the search index from documents.
 
@@ -54,29 +80,8 @@ class SearchIndex:
 
 		con = await self._connect()
 		try:
-			await con.execute("PRAGMA synchronous = OFF;")
-			await con.execute("PRAGMA journal_mode = MEMORY;")
-			await con.execute(f"DROP TABLE IF EXISTS {_TABLE}")
-			await con.execute(
-				f'CREATE VIRTUAL TABLE {_TABLE} USING fts5(path UNINDEXED, title, content, tokenize="trigram")'
-			)
-
-			batch = []
-			for path, title, content in documents:
-				batch.append((path, title, content))
-				if len(batch) >= _BATCH_SIZE:
-					try:
-						await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-					except Exception:
-						logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
-					batch.clear()
-
-			if batch:
-				try:
-					await con.executemany(f"INSERT INTO {_TABLE}(path, title, content) VALUES (?, ?, ?)", batch)
-				except Exception:
-					logger.warning("Failed to index a batch of documents, skipping", exc_info=True)
-
+			await self._setup_table(con)
+			await self._insert_documents(con, documents)
 			await con.commit()
 		except Exception:
 			logger.warning("Failed to build index", exc_info=True)
