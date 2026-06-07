@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from prefab_ui.app import PrefabApp
-from prefab_ui.components import Column, DataTable, DataTableColumn, Heading, Metric, Muted, Row, Separator
+from prefab_ui.components import Badge, Column, DataTable, DataTableColumn, Heading, Metric, Muted, Row, Separator
 from prefab_ui.components.charts import BarChart, ChartSeries
 
 from gabos_mcp.utils.auth import get_github_login
@@ -16,6 +16,22 @@ if TYPE_CHECKING:
 	from prefab_ui.components.data_table import ExpandableRow
 
 
+_SUFFIX_VARIANT: dict[str, str] = {
+	"_read": "info",
+	"_search": "secondary",
+	"_write": "warning",
+	"_delete": "destructive",
+	"_stats": "default",
+}
+
+
+def _tool_badge(tool: str) -> Badge:
+	for suffix, variant in _SUFFIX_VARIANT.items():
+		if tool.endswith(suffix):
+			return Badge(tool, variant=variant)  # type: ignore[arg-type]
+	return Badge(tool, variant="outline")
+
+
 def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableRow]:
 	rows = []
 	for tool, count in stats["tools"]:
@@ -23,7 +39,7 @@ def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableR
 		d = stats["duration_stats"].get(tool, {})
 		rows.append(
 			{
-				"tool": tool,
+				"tool": _tool_badge(tool),
 				"calls": str(count),
 				"errors": str(errors),
 				"min_ms": f"{d.get('min', 0):.1f}",
