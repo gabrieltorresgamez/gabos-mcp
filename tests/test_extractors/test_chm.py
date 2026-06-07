@@ -143,42 +143,6 @@ class TestReadPage:
 			await extractor_with_html.read_page("testapp", "manual", "nonexistent.md")
 
 
-class TestListPages:
-	@pytest.mark.asyncio
-	async def test_lists_all_pages(self, extractor_with_html):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		pages = await extractor_with_html.list_pages("testapp", "manual", limit=100)
-		assert len(pages) == 3
-
-	@pytest.mark.asyncio
-	async def test_pagination(self, extractor_with_html):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		page1 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=0)
-		page2 = await extractor_with_html.list_pages("testapp", "manual", limit=1, offset=1)
-		assert len(page1) == 1
-		assert len(page2) == 1
-		assert page1[0]["path"] != page2[0]["path"]
-
-
-class TestListApps:
-	def test_lists_configured_apps(self, extractor_with_html):
-		assert extractor_with_html.list_apps() == ["testapp"]
-
-	def test_empty_when_no_apps(self, tmp_cache):
-		ext = ChmExtractor(apps={}, cache_dir=tmp_cache)
-		assert ext.list_apps() == []
-
-
-class TestListSources:
-	def test_lists_sources_for_app(self, extractor_with_html):
-		assert extractor_with_html.list_sources("testapp") == ["manual"]
-
-	def test_unknown_app_raises(self, tmp_cache):
-		ext = ChmExtractor(apps={}, cache_dir=tmp_cache)
-		with pytest.raises(ValueError, match="Unknown app"):
-			ext.list_sources("nonexistent")
-
-
 class TestValidation:
 	@pytest.mark.asyncio
 	async def test_unknown_app_raises(self, tmp_cache):
@@ -190,71 +154,6 @@ class TestValidation:
 	async def test_unknown_source_raises(self, extractor_with_html):
 		with pytest.raises(ValueError, match="Unknown source"):
 			await extractor_with_html.read_page("testapp", "nonexistent", "page.md")
-
-
-class TestClearCache:
-	@pytest.mark.asyncio
-	async def test_clears_specific_source(self, extractor_with_html, tmp_cache):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		cache = Path(tmp_cache) / "testapp" / "manual"
-		assert cache.exists()
-
-		cleared = extractor_with_html.clear_cache(app="testapp", source="manual")
-
-		assert not cache.exists()
-		assert len(cleared) == 1
-		assert "testapp" in cleared[0]
-
-	@pytest.mark.asyncio
-	async def test_clears_all_sources_for_app(self, extractor_with_html, tmp_cache):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		cleared = extractor_with_html.clear_cache(app="testapp")
-		assert len(cleared) == 1
-
-	@pytest.mark.asyncio
-	async def test_clears_all(self, extractor_with_html, tmp_cache):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		cleared = extractor_with_html.clear_cache()
-		assert len(cleared) == 1
-
-	@pytest.mark.asyncio
-	async def test_returns_empty_when_nothing_cached(self, tmp_path, tmp_cache):
-		chm_path = tmp_path / "test.chm"
-		chm_path.touch()
-		ext = ChmExtractor(apps={"testapp": {"manual": str(chm_path)}}, cache_dir=tmp_cache)
-		assert ext.clear_cache() == []
-
-	@pytest.mark.asyncio
-	async def test_removes_from_ready_set(self, extractor_with_html):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		assert "testapp/manual" in extractor_with_html._ready
-
-		extractor_with_html.clear_cache(app="testapp", source="manual")
-		assert "testapp/manual" not in extractor_with_html._ready
-
-	@pytest.mark.asyncio
-	async def test_source_without_app_raises(self, extractor_with_html):
-		with pytest.raises(ValueError, match="Cannot specify source without app"):
-			extractor_with_html.clear_cache(source="manual")
-
-	@pytest.mark.asyncio
-	async def test_unknown_app_raises(self, extractor_with_html):
-		with pytest.raises(ValueError, match="Unknown app"):
-			extractor_with_html.clear_cache(app="nonexistent")
-
-	@pytest.mark.asyncio
-	async def test_rebuild_works_after_clear(self, extractor_with_html, tmp_cache, sample_html_dir):
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		extractor_with_html.clear_cache(app="testapp", source="manual")
-
-		# Re-create the html symlink so _extract marker is present again
-		chm_cache = Path(tmp_cache) / "testapp" / "manual" / "html"
-		chm_cache.parent.mkdir(parents=True, exist_ok=True)
-		chm_cache.symlink_to(sample_html_dir)
-
-		await extractor_with_html._ensure_ready("testapp", "manual")
-		results = await extractor_with_html.search("welcome", app="testapp")
-		assert len(results) > 0
 
 
 class TestExtract:

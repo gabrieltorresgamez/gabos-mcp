@@ -123,28 +123,6 @@ class SearchIndex:
 
 		return results
 
-	async def list_documents(self, limit: int = 50, offset: int = 0) -> list[dict]:
-		"""List all indexed documents, ordered by path.
-
-		Args:
-		    limit: Maximum number of results to return.
-		    offset: Number of results to skip.
-
-		Returns:
-		    List of dicts with keys: title, path.
-		"""
-		if not self._db_path.exists():
-			return []
-
-		con = await self._connect()
-		cursor = await con.execute(
-			f"SELECT path, title FROM {_TABLE} ORDER BY path LIMIT ? OFFSET ?",
-			(limit, offset),
-		)
-		rows = await cursor.fetchall()
-
-		return [{"title": title, "path": path} for path, title in rows]
-
 	async def close(self) -> None:
 		"""Close the database connection and release the background thread."""
 		if self._conn is not None:

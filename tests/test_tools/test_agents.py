@@ -47,43 +47,80 @@ async def tools(stores, tmp_path):
 	return mcp.tools, as_, ks
 
 
-# ── agent_read ───────────────────────────────────────────────────────────────────
+# ── agent_search ─────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-class TestAgentRead:
-	async def test_list_mode_returns_visible_agents(self, tools):
+class TestAgentSearch:
+	async def test_lists_visible_agents(self, tools):
 		fns, as_, ks = tools
 		await as_.create(owner="alice", name="alice-private", description="D", system_prompt="P", shared=False)
 		await as_.create(owner="alice", name="alice-shared", description="D", system_prompt="P", shared=True)
 		await as_.create(owner="bob", name="bob-private", description="D", system_prompt="P", shared=False)
 
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_read"]())
+			result = json.loads(await fns["agent_search"]())
 		names = {a["name"] for a in result}
 		assert "alice-private" in names
 		assert "alice-shared" in names
 		assert "bob-private" not in names
 
-	async def test_fetch_by_name(self, tools):
+	async def test_result_includes_id(self, tools):
 		fns, as_, ks = tools
 		await as_.create(owner="alice", name="myagent", description="D", system_prompt="P")
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
-			result = json.loads(await fns["agent_read"](name_or_id="myagent"))
+			result = json.loads(await fns["agent_search"]())
+		assert all("id" in a for a in result)
+
+	async def test_query_filters_by_name(self, tools):
+		fns, as_, ks = tools
+		await as_.create(owner="alice", name="omnitracker", description="D", system_prompt="P", shared=True)
+		await as_.create(owner="alice", name="helpdesk", description="D", system_prompt="P", shared=True)
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
+			result = json.loads(await fns["agent_search"](query="omni"))
+		assert len(result) == 1
+		assert result[0]["name"] == "omnitracker"
+
+	async def test_query_filters_by_description(self, tools):
+		fns, as_, ks = tools
+		await as_.create(owner="alice", name="ag", description="ticket management", system_prompt="P", shared=True)
+		await as_.create(owner="alice", name="bg", description="unrelated", system_prompt="P", shared=True)
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
+			result = json.loads(await fns["agent_search"](query="ticket"))
+		assert len(result) == 1
+		assert result[0]["name"] == "ag"
+
+
+# ── agent_read ───────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+class TestAgentRead:
+	async def test_fetch_by_id(self, tools):
+		fns, as_, ks = tools
+		agent = await as_.create(owner="alice", name="myagent", description="D", system_prompt="P")
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"):
+			result = json.loads(await fns["agent_read"](id=agent.id))
 		assert result["name"] == "myagent"
 		assert "system_prompt" in result
 
+	async def test_name_lookup_not_supported(self, tools):
+		fns, as_, ks = tools
+		await as_.create(owner="alice", name="myagent", description="D", system_prompt="P")
+		with patch("gabos_mcp.tools.agents.get_github_login", return_value="alice"), pytest.raises(KeyError):
+			await fns["agent_read"](id="myagent")
+
 	async def test_non_owner_cannot_fetch_private_agent(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="private", description="D", system_prompt="P", shared=False)
+		agent = await as_.create(owner="alice", name="private", description="D", system_prompt="P", shared=False)
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"), pytest.raises(PermissionError):
-			await fns["agent_read"](name_or_id="private")
+			await fns["agent_read"](id=agent.id)
 
 	async def test_shared_agent_visible_to_non_owner(self, tools):
 		fns, as_, ks = tools
-		await as_.create(owner="alice", name="shared", description="D", system_prompt="P", shared=True)
+		agent = await as_.create(owner="alice", name="shared", description="D", system_prompt="P", shared=True)
 		with patch("gabos_mcp.tools.agents.get_github_login", return_value="bob"):
-			result = json.loads(await fns["agent_read"](name_or_id="shared"))
+			result = json.loads(await fns["agent_read"](id=agent.id))
 		assert result["name"] == "shared"
 
 

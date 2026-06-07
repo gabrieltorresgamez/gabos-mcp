@@ -209,61 +209,6 @@ class KnowledgeStore:
 		row = await cursor.fetchone()
 		return self._row_to_dict(row) if row else None
 
-	async def list_entries(
-		self,
-		owner: str | None = None,
-		tag: str | None = None,
-		limit: int = 50,
-		offset: int = 0,
-		caller: str | None = None,
-	) -> list[dict]:
-		"""List entries, optionally filtered by owner and/or tag.
-
-		Args:
-		    owner: Filter to entries owned by this GitHub login.
-		    tag: Filter to entries containing this tag.
-		    limit: Maximum number of results.
-		    offset: Number of entries to skip.
-		    caller: If provided, restrict results to entries visible to this user
-		            (own entries or entries where shared=True).
-
-		Returns:
-		    List of entry dicts ordered by updated_at descending, without content.
-		"""
-		conn = await self._connect()
-		query = "SELECT DISTINCT knowledge.* FROM knowledge"
-		params: list[str | int] = []
-		where_parts: list[str] = []
-
-		if caller is not None:
-			where_parts.append("(knowledge.owner = ? OR knowledge.shared = 1)")
-			params.append(caller)
-
-		if tag:
-			query += ", json_each(knowledge.tags)"
-			where_parts.append("json_each.value = ?")
-			params.append(tag)
-
-		if owner:
-			where_parts.append("knowledge.owner = ?")
-			params.append(owner)
-
-		if where_parts:
-			query += " WHERE " + " AND ".join(where_parts)
-
-		query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
-		params.extend([limit, offset])
-
-		cursor = await conn.execute(query, tuple(params))
-		rows = await cursor.fetchall()
-
-		results = []
-		for r in rows:
-			d = self._row_to_dict(r)
-			d.pop("content", None)
-			results.append(d)
-		return results
-
 	async def update(
 		self,
 		id: str,

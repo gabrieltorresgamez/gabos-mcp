@@ -53,62 +53,6 @@ class TestGet:
 
 
 @pytest.mark.asyncio
-class TestList:
-	async def test_returns_all_entries_without_caller(self, store):
-		await store.add(owner="alice", title="A", content="1")
-		await store.add(owner="bob", title="B", content="2")
-		assert len(await store.list_entries()) == 2
-
-	async def test_caller_sees_own_and_shared(self, store):
-		await store.add(owner="alice", title="alice-private", content="1", shared=False)
-		await store.add(owner="alice", title="alice-shared", content="2", shared=True)
-		await store.add(owner="bob", title="bob-private", content="3", shared=False)
-		await store.add(owner="bob", title="bob-shared", content="4", shared=True)
-
-		results = await store.list_entries(caller="alice")
-		titles = {e["title"] for e in results}
-		assert "alice-private" in titles
-		assert "alice-shared" in titles
-		assert "bob-shared" in titles
-		assert "bob-private" not in titles
-
-	async def test_filter_by_owner(self, store):
-		await store.add(owner="alice", title="A", content="1")
-		await store.add(owner="bob", title="B", content="2")
-		results = await store.list_entries(owner="alice")
-		assert len(results) == 1
-		assert results[0]["owner"] == "alice"
-
-	async def test_filter_by_owner_respects_visibility_for_caller(self, store):
-		await store.add(owner="alice", title="alice-private", content="1", shared=False)
-		await store.add(owner="alice", title="alice-shared", content="2", shared=True)
-		# bob asking for alice's entries: should only see shared ones
-		results = await store.list_entries(owner="alice", caller="bob")
-		titles = {e["title"] for e in results}
-		assert "alice-shared" in titles
-		assert "alice-private" not in titles
-
-	async def test_filter_by_tag(self, store):
-		await store.add(owner="alice", title="A", content="1", tags=["python"])
-		await store.add(owner="bob", title="B", content="2", tags=["go"])
-		results = await store.list_entries(tag="python")
-		assert len(results) == 1
-		assert results[0]["owner"] == "alice"
-
-	async def test_pagination(self, store):
-		for i in range(5):
-			await store.add(owner="alice", title=f"T{i}", content="C")
-		page1 = await store.list_entries(limit=2, offset=0)
-		page2 = await store.list_entries(limit=2, offset=2)
-		assert len(page1) == 2
-		assert len(page2) == 2
-		assert {r["title"] for r in page1}.isdisjoint({r["title"] for r in page2})
-
-	async def test_empty_list(self, store):
-		assert await store.list_entries() == []
-
-
-@pytest.mark.asyncio
 class TestUpdate:
 	async def test_updates_title(self, store):
 		entry = await store.add(owner="alice", title="Old", content="C")

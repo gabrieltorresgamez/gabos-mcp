@@ -191,17 +191,6 @@ class TestKnowledgeSearch:
 
 @pytest.mark.asyncio
 class TestKnowledgeRead:
-	async def test_list_mode_returns_visible_entries(self, tools):
-		fns, ks, as_ = tools
-		await ks.add(owner="alice", title="A", content="1", shared=True)
-		await ks.add(owner="bob", title="B", content="2", shared=False)
-
-		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
-			result = json.loads(await fns["knowledge_read"]())
-		titles = {e["title"] for e in result}
-		assert "A" in titles
-		assert "B" not in titles  # bob's private entry
-
 	async def test_fetch_by_id(self, tools):
 		fns, ks, as_ = tools
 		entry = await ks.add(owner="alice", title="T", content="Hello")
@@ -216,22 +205,10 @@ class TestKnowledgeRead:
 		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="bob"), pytest.raises(PermissionError):
 			await fns["knowledge_read"](id=entry["id"])
 
-	async def test_list_mode_omits_content(self, tools):
+	async def test_not_found_raises_key_error(self, tools):
 		fns, ks, as_ = tools
-		await ks.add(owner="alice", title="A", content="secret", shared=True)
-		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
-			result = json.loads(await fns["knowledge_read"]())
-		assert all("content" not in e for e in result)
-		assert all("title" in e for e in result)
-
-	async def test_filter_by_tag(self, tools):
-		fns, ks, as_ = tools
-		await ks.add(owner="alice", title="Python", content="1", tags=["python"], shared=True)
-		await ks.add(owner="alice", title="Go", content="2", tags=["go"], shared=True)
-		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
-			result = json.loads(await fns["knowledge_read"](tag="python"))
-		assert len(result) == 1
-		assert result[0]["title"] == "Python"
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"), pytest.raises(KeyError):
+			await fns["knowledge_read"](id="nonexistent-id")
 
 
 # ── knowledge_write ──────────────────────────────────────────────────────────────
