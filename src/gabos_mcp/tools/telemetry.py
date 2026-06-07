@@ -108,6 +108,7 @@ def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
 				series=tool_bar_series,
 				xAxis="tool",
 				stacked=True,
+				horizontal=True,
 			),
 			Separator(),
 			Heading(content="Calls by User", level=2),
