@@ -36,12 +36,12 @@ def _tool_table_rows(stats: dict[str, Any]) -> list[dict[str, Any] | ExpandableR
 	return rows
 
 
-def _build_dashboard(stats: dict[str, Any], top_n: int) -> PrefabApp:
+def _build_dashboard(stats: dict[str, Any]) -> PrefabApp:
 	tool_bar_data = [{"tool": t, "calls": c} for t, c in stats["top_tools"]]
 	caller_bar_data = [{"caller": c, "calls": n} for c, n in stats["top_callers"]]
 	view = Column(
 		children=[
-			Heading(content=f"Tool Call Statistics (top {top_n})"),
+			Heading(content="Tool Call Statistics"),
 			Row(
 				children=[
 					Metric(label="Total Calls", value=str(stats["total"])),
@@ -78,7 +78,6 @@ def _build_dashboard(stats: dict[str, Any], top_n: int) -> PrefabApp:
 					DataTableColumn(key="std_ms", header="Std", sortable=True),
 				],
 				rows=_tool_table_rows(stats),
-				search=True,
 			),
 		],
 		gap=6,
@@ -90,20 +89,17 @@ def register(mcp: FastMCP) -> None:
 	"""Register telemetry tools on the given FastMCP instance."""
 
 	@mcp.tool(app=True)
-	async def telemetry_stats(top_n: int = 10) -> PrefabApp:
+	async def telemetry_stats() -> PrefabApp:
 		"""Show tool-call statistics: who called which tools and how often.
 
 		Returns per-tool call counts, top callers, error counts, and duration
 		statistics (min, max, mean, median, std). Only accessible to users
 		listed in GABOS_ADMIN_USERS.
-
-		Args:
-		    top_n: Number of top entries to show per category (default 10).
 		"""
 		caller = get_github_login()
 		if not is_admin(caller):
 			raise PermissionError("telemetry_stats is restricted to admins (GABOS_ADMIN_USERS).")
-		stats = await get_stats_data(top_n)
+		stats = await get_stats_data()
 		if stats is None:
 			return PrefabApp(view=Muted(content="No telemetry data yet."), title="Telemetry Dashboard")
-		return _build_dashboard(stats, top_n)
+		return _build_dashboard(stats)
