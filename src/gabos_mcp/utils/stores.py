@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 
 from platformdirs import user_data_path
@@ -10,8 +11,9 @@ from gabos_mcp.extractors.agent_store import AgentStore
 from gabos_mcp.extractors.knowledge import KnowledgeStore
 
 
+@functools.cache
 def get_knowledge_store() -> KnowledgeStore:
-	"""Return a KnowledgeStore using the configured or default DB path."""
+	"""Return the shared KnowledgeStore instance (created once, reused on subsequent calls)."""
 	db_path = os.environ.get(
 		"GABOS_KNOWLEDGE_DB",
 		str(user_data_path("gabos-mcp") / "knowledge.db"),
@@ -19,8 +21,9 @@ def get_knowledge_store() -> KnowledgeStore:
 	return KnowledgeStore(db_path=db_path)
 
 
+@functools.cache
 def get_agent_store() -> AgentStore:
-	"""Return an AgentStore using the configured or default DB path."""
+	"""Return the shared AgentStore instance (created once, reused on subsequent calls)."""
 	db_path = os.environ.get(
 		"GABOS_AGENTS_DB",
 		str(user_data_path("gabos-mcp") / "agents.db"),
