@@ -67,7 +67,7 @@ Tools are named with a suffix that reflects their side-effect class, making per-
 
 ## Tools
 
-Tools are grouped by module and named `module_verb` so they sort alphabetically by domain. There are 10 tools total.
+Tools are grouped by module and named `module_verb` so they sort alphabetically by domain. There are 11 tools total.
 
 ### Permission model
 
@@ -82,22 +82,24 @@ Agents are domain expert personas stored in the database. Each agent has a syste
 
 **Agent Q&A flow:**
 
-1. `agent_read(name)` → `system_prompt`, `knowledge_tags`
-2. Search the agent's knowledge. Always search the `agent:<name>` baseline:
+1. `agent_search()` → pick agent, note `id` and `name`
+2. `agent_read(id=...)` → `system_prompt`, `knowledge_tags`
+3. Search the agent's knowledge. Always search the `agent:<name>` baseline:
    `knowledge_search(query, tag="agent:<name>")`. If `knowledge_tags` is
    non-empty, run one additional `knowledge_search` per listed tag and merge
    the results. Most agents leave `knowledge_tags` empty and rely on the
    baseline alone.
-3. `knowledge_read(id=...)` for entries worth reading
-4. `docs_search` / `docs_read` if CHM documentation is relevant
-5. Answer using `system_prompt` as persona
-6. `knowledge_write(tags=["agent:<name>"])` to persist new facts
+4. `knowledge_read(id=...)` for entries worth reading
+5. `docs_search` / `docs_read` if CHM documentation is relevant
+6. Answer using `system_prompt` as persona
+7. `knowledge_write(tags=["agent:<name>"])` to persist new facts
 
-| Tool           | Description                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `agent_read`   | List all visible agents (no args), or fetch a specific agent by name/ID (includes system_prompt, knowledge_tags). |
-| `agent_write`  | Create (`mode="create"`) or update (`mode="update"`) an agent definition. Owner-only.                      |
-| `agent_delete` | Delete an agent entirely. Owner-only. Knowledge entries tagged to the agent are **not** deleted.           |
+| Tool             | Description                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------ |
+| `agent_search`   | List all visible agents, optionally filtered by a query. Returns `id`, name, owner, description. |
+| `agent_read`     | Fetch full details for a single agent by UUID (includes `system_prompt`, `knowledge_tags`).      |
+| `agent_write`    | Create (`mode="create"`) or update (`mode="update"`) an agent definition. Owner-only.            |
+| `agent_delete`   | Delete an agent entirely. Owner-only. Knowledge entries tagged to the agent are **not** deleted. |
 
 **agent_write modes:**
 
@@ -111,7 +113,7 @@ A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes 
 | Tool               | Description                                                                                              |
 | ------------------ | -------------------------------------------------------------------------------------------------------- |
 | `knowledge_search` | Full-text search over entries, ranked by relevance. Returns metadata + score only; fetch content via `knowledge_read`. |
-| `knowledge_read`   | Fetch a single entry by `id` (with content), or list entries filtered by `owner`/`tag` with pagination. |
+| `knowledge_read`   | Fetch a single entry by `id` (includes full content). Use `knowledge_search` to discover IDs.           |
 | `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.          |
 | `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                    |
 
@@ -129,7 +131,7 @@ Read and search CHM documentation files configured via `GABOS_CHM_FILES`.
 | Tool          | Description                                                                                                                                                       |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `docs_search` | Full-text search across configured CHM apps. Use for free-text queries.                                                                                           |
-| `docs_read`   | Browse apps/sources/pages or read a page. Behaviour: no args → list apps; `app` → list sources; `app+source` → list pages; `app+source+page_path` → read content. |
+| `docs_read`   | Read the full Markdown content of a page. Requires `app`, `source`, and `page_path` (all from `docs_search` results). |
 
 **Cache invalidation:**
 
