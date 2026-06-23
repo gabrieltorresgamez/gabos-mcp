@@ -88,7 +88,7 @@ A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes 
 
 | Tool               | Description                                                                                                       |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `knowledge_search` | Full-text search over entries, ranked by relevance. Returns metadata + score; fetch content via `knowledge_read`. |
+| `knowledge_search` | Search entries by query (FTS, ranked by relevance) or browse by tag (ordered by recency). At least one of `query` or `tag` required. Returns metadata + score; fetch content via `knowledge_read`. |
 | `knowledge_read`   | Fetch a single entry by `id` (includes full content).                                                             |
 | `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.                    |
 | `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                             |

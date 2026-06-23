@@ -163,6 +163,29 @@ class TestKnowledgeSearch:
 			result = json.loads(await fns["knowledge_search"](query="xyzzy"))
 		assert result == []
 
+	async def test_tag_only_no_query_lists_entries(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Tagged A", content="content", tags=["mytag"], shared=True)
+		await ks.add(owner="alice", title="Tagged B", content="content", tags=["mytag"], shared=True)
+		await ks.add(owner="alice", title="Other", content="content", tags=["other"], shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](tag="mytag"))
+		titles = {r["title"] for r in result}
+		assert titles == {"Tagged A", "Tagged B"}
+
+	async def test_tag_only_score_is_null(self, tools):
+		fns, ks, as_ = tools
+		await ks.add(owner="alice", title="Tagged", content="content", tags=["mytag"], shared=True)
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"](tag="mytag"))
+		assert result[0]["score"] is None
+
+	async def test_no_query_no_tag_returns_error(self, tools):
+		fns, ks, as_ = tools
+		with patch("gabos_mcp.tools.knowledge.get_github_login", return_value="alice"):
+			result = json.loads(await fns["knowledge_search"]())
+		assert "error" in result
+
 
 # ── knowledge_read ───────────────────────────────────────────────────────────────
 

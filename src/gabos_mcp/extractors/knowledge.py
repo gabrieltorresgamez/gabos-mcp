@@ -82,7 +82,7 @@ class KnowledgeStore(BaseStore):
 
 	async def search(
 		self,
-		query: str,
+		query: str | None = None,
 		tag: str | None = None,
 		owner: str | None = None,
 		limit: int = 10,
@@ -91,8 +91,11 @@ class KnowledgeStore(BaseStore):
 	) -> list[dict]:
 		"""Full-text search over knowledge entries, ranked by relevance.
 
+		When ``query`` is omitted and ``tag`` is provided, returns all matching
+		entries ordered by ``updated_at`` descending (no FTS score).
+
 		Args:
-		    query: Search terms (FTS5 trigram match).
+		    query: Search terms (FTS5 trigram match). Optional when tag is given.
 		    tag: Optional tag to restrict results to.
 		    owner: Optional owner login to restrict results to.
 		    limit: Maximum number of results.
@@ -102,9 +105,14 @@ class KnowledgeStore(BaseStore):
 
 		Returns:
 		    List of entry dicts ordered by relevance (best first), each including
-		    a ``score`` field (FTS5 BM25 rank; lower/more negative = better match).
+		    a ``score`` field (FTS5 BM25 rank; lower/more negative = better match,
+		    None when no query was given).
+
+		Raises:
+		    ValueError: If neither query nor tag is provided.
 		"""
-		fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
+		if not query and not tag:
+			raise ValueError("At least one of 'query' or 'tag' must be provided.")
 		conn = await self._connect()
 
 		visibility_clause = ""
@@ -119,26 +127,33 @@ class KnowledgeStore(BaseStore):
 			owner_clause = "AND k.owner = ? "
 			owner_params = [owner]
 
+		tag_clause = ""
+		tag_params: list[str] = []
 		if tag:
+			tag_clause = "AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
+			tag_params = [tag]
+
+		if not query:
+			# Tag-browse path: no FTS, return all matching entries by recency.
 			cursor = await conn.execute(
-				"SELECT k.*, knowledge_fts.rank AS score FROM knowledge_fts "
-				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
-				"WHERE knowledge_fts MATCH ? "
+				"SELECT k.*, NULL AS score FROM knowledge k WHERE 1=1 "
 				+ visibility_clause
 				+ owner_clause
-				+ "AND EXISTS (SELECT 1 FROM json_each(k.tags) jt WHERE jt.value = ?) "
-				"ORDER BY knowledge_fts.rank LIMIT ? OFFSET ?",
-				(fts_query, *visibility_params, *owner_params, tag, limit, offset),
+				+ tag_clause
+				+ "ORDER BY k.updated_at DESC LIMIT ? OFFSET ?",
+				(*visibility_params, *owner_params, *tag_params, limit, offset),
 			)
 		else:
+			fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
 			cursor = await conn.execute(
 				"SELECT k.*, knowledge_fts.rank AS score FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
 				"WHERE knowledge_fts MATCH ? "
 				+ visibility_clause
 				+ owner_clause
+				+ tag_clause
 				+ "ORDER BY knowledge_fts.rank LIMIT ? OFFSET ?",
-				(fts_query, *visibility_params, *owner_params, limit, offset),
+				(fts_query, *visibility_params, *owner_params, *tag_params, limit, offset),
 			)
 		rows = await cursor.fetchall()
 		return [self._row_to_dict(r) for r in rows]

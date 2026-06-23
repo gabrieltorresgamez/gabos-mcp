@@ -47,7 +47,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 	@mcp.tool
 	async def knowledge_search(
-		query: str,
+		query: str | None = None,
 		tag: str | None = None,
 		owner: str | None = None,
 		limit: int = 20,
@@ -58,16 +58,21 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		Returns metadata only (id, title, tags, owner, updated_at, score) — no
 		content. Follow up with knowledge_read(id=...) for entries worth reading.
 		The score is the FTS5 BM25 rank; lower (more negative) means a better match.
+		Score is null when tag is provided without a query (browse mode).
 
 		Visibility: caller sees own entries and entries where shared=true.
 
+		At least one of query or tag must be provided.
+
 		Args:
-		    query: Search terms (FTS5 trigram match).
+		    query: Search terms (FTS5 trigram match). Optional when tag is given.
 		    tag: Filter to entries containing this tag (e.g. "agent:myagent").
 		    owner: Filter to entries owned by this GitHub login.
 		    limit: Maximum results to return (default 20).
 		    offset: Entries to skip (default 0).
 		"""
+		if not query and not tag:
+			return json.dumps({"error": "Provide at least one of 'query' or 'tag'."})
 		user = get_github_login()
 		caller = None if user == "anonymous" else user
 		await store.migrate()

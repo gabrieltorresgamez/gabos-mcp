@@ -153,6 +153,28 @@ class TestSearch:
 		assert "alice-shared" in titles
 		assert "alice-private" not in titles
 
+	async def test_tag_only_browse_returns_entries(self, store):
+		await store.add(owner="alice", title="Tagged", content="c", tags=["mytag"])
+		await store.add(owner="alice", title="Other", content="c", tags=["other"])
+		results = await store.search(tag="mytag")
+		assert len(results) == 1
+		assert results[0]["title"] == "Tagged"
+
+	async def test_tag_only_score_is_none(self, store):
+		await store.add(owner="alice", title="Tagged", content="c", tags=["mytag"])
+		results = await store.search(tag="mytag")
+		assert results[0]["score"] is None
+
+	async def test_empty_string_query_with_tag_uses_browse(self, store):
+		await store.add(owner="alice", title="Tagged", content="c", tags=["mytag"])
+		results = await store.search(query="", tag="mytag")
+		assert len(results) == 1
+		assert results[0]["score"] is None
+
+	async def test_no_query_no_tag_raises(self, store):
+		with pytest.raises(ValueError, match="At least one"):
+			await store.search()
+
 
 @pytest.mark.asyncio
 class TestDelete:

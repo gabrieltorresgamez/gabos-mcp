@@ -22,7 +22,7 @@ Agents are domain expert personas stored in the database. Context assembly is fu
 1. `agent_search()` → pick agent, note `id` and `name`
 2. `agent_read(id=...)` → `system_prompt`, `knowledge_tags`
 3. Search the agent's knowledge. Always search the `agent:<name>` baseline:
-   `knowledge_search(query, tag="agent:<name>")`. If `knowledge_tags` is
+   `knowledge_search(query=..., tag="agent:<name>")`. If `knowledge_tags` is
    non-empty, run one additional `knowledge_search` per listed tag and merge
    the results. Most agents leave `knowledge_tags` empty and rely on the
    baseline alone.
