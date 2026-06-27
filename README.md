@@ -22,8 +22,7 @@ Copy `docker-compose.yml-example` to `docker-compose.yml` and configure via envi
 | `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                    | Absolute path to the backup folder                         |
 | `GABOS_BACKUP_TIME`           | `02:00`                                        | Time of day to run the backup (24h, local time)            |
 | `GABOS_BACKUP_RETENTION_DAYS` | `30`                                           | Days to keep backups (0 = keep forever)                    |
-| `GABOS_TELEMETRY_LOG`         | `~/.local/share/logs/gabos-mcp/tool_calls.log` | Path to the logfmt tool-call log                           |
-| `GABOS_ADMIN_USERS`           | _(none — `telemetry_stats` inaccessible)_      | Comma-separated GitHub handles allowed to call admin tools |
+| `GABOS_TELEMETRY_LOG`         | `~/.local/share/logs/gabos-mcp/tool_calls.log` | Path to the anonymous logfmt tool-call log                 |
 | `GITHUB_CLIENT_ID`            | _(none)_                                       | GitHub OAuth app client ID (enables OAuth)                 |
 | `GITHUB_CLIENT_SECRET`        | _(none)_                                       | GitHub OAuth app client secret                             |
 | `MCP_BASE_URL`                | _(none)_                                       | Public URL of the server (e.g. `https://my.host`)          |
@@ -69,7 +68,7 @@ Tool suffixes reflect side-effect class, making per-tool allow-lists straightfor
 
 ## Tools
 
-Reads are open to all authenticated users; private items are hidden from non-owners without error. Writes and deletes are owner-only. `telemetry_stats` requires the caller to be listed in `GABOS_ADMIN_USERS`.
+Reads are open to all authenticated users; private items are hidden from non-owners without error. Writes and deletes are owner-only.
 
 ### Agents
 
@@ -110,8 +109,4 @@ rm -rf "$GABOS_CHM_CACHE_DIR/MYAPP/mysource"
 
 ### Telemetry
 
-Every tool call is logged to `GABOS_TELEMETRY_LOG`.
-
-| Tool              | Description                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `telemetry_stats` | Interactive dashboard: call counts by tool and user (bar charts), plus a sortable duration-stats table (min/max/mean/median/std per tool). Admin-only. |
+Every tool call is logged anonymously to `GABOS_TELEMETRY_LOG` (tool name, duration, success/error only — no caller identity is recorded).
