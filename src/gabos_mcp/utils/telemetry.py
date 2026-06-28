@@ -1,11 +1,10 @@
-"""Tool-call telemetry: logfmt persistence, admin helpers, and FastMCP middleware."""
+"""Anonymous tool-call telemetry: logfmt persistence and FastMCP middleware."""
 
 from __future__ import annotations
 
 import asyncio
 import os
 import time
-from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, override
@@ -13,8 +12,6 @@ from typing import TYPE_CHECKING, Any, override
 import aiofiles
 from fastmcp.server.middleware.middleware import Middleware
 from platformdirs import user_log_path
-
-from gabos_mcp.utils.auth import get_github_login
 
 if TYPE_CHECKING:
 	from fastmcp.server.middleware.middleware import CallNext, MiddlewareContext
@@ -28,26 +25,6 @@ def _log_path() -> Path:
 	if raw:
 		return Path(raw)
 	return user_log_path("gabos-mcp") / "tool_calls.log"
-
-
-def get_admin_users() -> set[str]:
-	"""Return the set of GitHub handles granted admin access.
-
-	Returns:
-	    Lowercase GitHub handles from GABOS_ADMIN_USERS, or empty set if unset.
-	"""
-	raw = os.getenv("GABOS_ADMIN_USERS", "")
-	return {u.strip().lower() for u in raw.split(",") if u.strip()}
-
-
-def is_admin(login: str) -> bool:
-	"""Return True if login is in the GABOS_ADMIN_USERS allow-list.
-
-	Returns:
-	    True when GABOS_ADMIN_USERS is non-empty and login matches an entry.
-	"""
-	admins = get_admin_users()
-	return bool(admins) and login.lower() in admins
 
 
 def _logfmt_value(v: object) -> str:
@@ -66,69 +43,16 @@ def _format_logfmt(fields: dict[str, object]) -> str:
 	return " ".join(f"{k}={_logfmt_value(v)}" for k, v in fields.items() if v is not None)
 
 
-def _parse_logfmt(line: str) -> dict[str, str]:
-	result: dict[str, str] = {}
-	i = 0
-	line = line.rstrip("\n")
-	n = len(line)
-	while i < n:
-		while i < n and line[i] == " ":
-			i += 1
-		if i >= n:
-			break
-		eq = line.find("=", i)
-		if eq == -1:
-			break
-		key = line[i:eq]
-		i = eq + 1
-		if i < n and line[i] == '"':
-			i += 1
-			start = i
-			while i < n and line[i] != '"':
-				if line[i] == "\\" and i + 1 < n:
-					i += 1
-				i += 1
-			value = line[start:i].replace('\\"', '"').replace("\\n", "\n")
-			i += 1
-		else:
-			start = i
-			while i < n and line[i] != " ":
-				i += 1
-			value = line[start:i]
-		result[key] = value
-	return result
-
-
-def _try_float(s: str) -> float | None:
-	try:
-		return float(s)
-	except ValueError:
-		return None
-
-
-def _duration_stats(durations: list[float]) -> dict[str, float]:
-	n = len(durations)
-	if n == 0:
-		return {}
-	sorted_d = sorted(durations)
-	mean = sum(sorted_d) / n
-	median = sorted_d[n // 2] if n % 2 == 1 else (sorted_d[n // 2 - 1] + sorted_d[n // 2]) / 2.0
-	std = (sum((d - mean) ** 2 for d in sorted_d) / (n - 1)) ** 0.5 if n > 1 else 0.0
-	return {"min": sorted_d[0], "max": sorted_d[-1], "mean": mean, "median": median, "std": std}
-
-
 async def log_tool_call(
 	tool_name: str,
-	caller: str,
 	duration_ms: float,
 	success: bool,
 	error: str | None = None,
 ) -> None:
-	"""Append one tool-call record to the telemetry log in logfmt format."""
+	"""Append one anonymous tool-call record to the telemetry log in logfmt format."""
 	fields: dict[str, object] = {
 		"ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
 		"tool": tool_name,
-		"caller": caller,
 		"duration_ms": duration_ms,
 		"ok": success,
 	}
@@ -142,72 +66,23 @@ async def log_tool_call(
 			await f.write(line)
 
 
-def _compute_stats(lines: list[str]) -> dict[str, Any]:
-	tool_counts: Counter[str] = Counter()
-	caller_counts: Counter[str] = Counter()
-	tool_errors: Counter[str] = Counter()
-	tool_durations: defaultdict[str, list[float]] = defaultdict(list)
-
-	for line in lines:
-		if not line.strip():
-			continue
-		rec = _parse_logfmt(line)
-		tool = rec.get("tool")
-		if tool is None:
-			continue
-		caller = rec.get("caller", "unknown")
-		ok = rec.get("ok", "true") == "true"
-		tool_counts[tool] += 1
-		caller_counts[caller] += 1
-		if not ok:
-			tool_errors[tool] += 1
-		dur = _try_float(rec.get("duration_ms", ""))
-		if dur is not None:
-			tool_durations[tool].append(dur)
-
-	return {
-		"total": sum(tool_counts.values()),
-		"tools": tool_counts.most_common(),
-		"callers": caller_counts.most_common(),
-		"tool_errors": dict(tool_errors.most_common()),
-		"duration_stats": {t: _duration_stats(ds) for t, ds in tool_durations.items()},
-	}
-
-
-async def get_stats_data() -> dict[str, Any] | None:
-	"""Read the telemetry log and return the raw stats dict.
-
-	Returns:
-	    Stats dict, or None if no telemetry data exists yet.
-	"""
-	path = _log_path()
-	if not path.exists():
-		return None
-	async with aiofiles.open(path) as f:
-		lines = await f.readlines()
-	if not lines:
-		return None
-	return _compute_stats(lines)
-
-
 class TelemetryMiddleware(Middleware):
-	"""FastMCP middleware that records every tool call to the telemetry log."""
+	"""FastMCP middleware that records every tool call anonymously to the telemetry log."""
 
 	@override
 	async def on_call_tool(self, context: MiddlewareContext, call_next: CallNext) -> Any:
-		"""Intercept tool calls; log tool name, caller, duration, and success/failure.
+		"""Intercept tool calls; log tool name, duration, and success/failure (no caller info).
 
 		Returns:
 		    The unmodified result from the next middleware or tool handler.
 		"""
 		tool_name: str = getattr(context.message, "name", "unknown")
-		caller = get_github_login()
 		start = time.perf_counter()
 		try:
 			result = await call_next(context)
 		except Exception as e:
-			await log_tool_call(tool_name, caller, (time.perf_counter() - start) * 1000, False, str(e))
+			await log_tool_call(tool_name, (time.perf_counter() - start) * 1000, False, str(e))
 			raise
 		else:
-			await log_tool_call(tool_name, caller, (time.perf_counter() - start) * 1000, True)
+			await log_tool_call(tool_name, (time.perf_counter() - start) * 1000, True)
 			return result

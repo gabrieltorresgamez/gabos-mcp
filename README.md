@@ -10,23 +10,22 @@ docker compose up
 
 Copy `docker-compose.yml-example` to `docker-compose.yml` and configure via environment variables:
 
-| Variable                      | Default                                        | Description                                                |
-| ----------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
-| `MCP_TRANSPORT`               | `streamable-http`                              | Transport protocol (`stdio` or `streamable-http`)          |
-| `MCP_HOST`                    | `0.0.0.0`                                      | Bind address (HTTP only)                                   |
-| `MCP_PORT`                    | `8000`                                         | Listen port (HTTP only)                                    |
-| `GABOS_CHM_FILES`             | `{}`                                           | JSON mapping of app names to CHM file paths                |
-| `GABOS_CHM_CACHE_DIR`         | `~/.cache/gabos-mcp/chm`                       | CHM extraction/index cache directory                       |
-| `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db`        | Knowledge SQLite database path                             |
-| `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`           | Agents SQLite database path                                |
-| `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                    | Absolute path to the backup folder                         |
-| `GABOS_BACKUP_TIME`           | `02:00`                                        | Time of day to run the backup (24h, local time)            |
-| `GABOS_BACKUP_RETENTION_DAYS` | `30`                                           | Days to keep backups (0 = keep forever)                    |
-| `GABOS_TELEMETRY_LOG`         | `~/.local/share/logs/gabos-mcp/tool_calls.log` | Path to the logfmt tool-call log                           |
-| `GABOS_ADMIN_USERS`           | _(none — `telemetry_stats` inaccessible)_      | Comma-separated GitHub handles allowed to call admin tools |
-| `GITHUB_CLIENT_ID`            | _(none)_                                       | GitHub OAuth app client ID (enables OAuth)                 |
-| `GITHUB_CLIENT_SECRET`        | _(none)_                                       | GitHub OAuth app client secret                             |
-| `MCP_BASE_URL`                | _(none)_                                       | Public URL of the server (e.g. `https://my.host`)          |
+| Variable                      | Default                                        | Description                                       |
+| ----------------------------- | ---------------------------------------------- | ------------------------------------------------- |
+| `MCP_TRANSPORT`               | `streamable-http`                              | Transport protocol (`stdio` or `streamable-http`) |
+| `MCP_HOST`                    | `0.0.0.0`                                      | Bind address (HTTP only)                          |
+| `MCP_PORT`                    | `8000`                                         | Listen port (HTTP only)                           |
+| `GABOS_CHM_FILES`             | `{}`                                           | JSON mapping of app names to CHM file paths       |
+| `GABOS_CHM_CACHE_DIR`         | `~/.cache/gabos-mcp/chm`                       | CHM extraction/index cache directory              |
+| `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db`        | Knowledge SQLite database path                    |
+| `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`           | Agents SQLite database path                       |
+| `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                    | Absolute path to the backup folder                |
+| `GABOS_BACKUP_TIME`           | `02:00`                                        | Time of day to run the backup (24h, local time)   |
+| `GABOS_BACKUP_RETENTION_DAYS` | `30`                                           | Days to keep backups (0 = keep forever)           |
+| `GABOS_TELEMETRY_LOG`         | `~/.local/share/logs/gabos-mcp/tool_calls.log` | Path to the anonymous logfmt tool-call log        |
+| `GITHUB_CLIENT_ID`            | _(none)_                                       | GitHub OAuth app client ID (enables OAuth)        |
+| `GITHUB_CLIENT_SECRET`        | _(none)_                                       | GitHub OAuth app client secret                    |
+| `MCP_BASE_URL`                | _(none)_                                       | Public URL of the server (e.g. `https://my.host`) |
 
 When all three `GITHUB_*`/`MCP_BASE_URL` variables are set, the server requires GitHub OAuth 2.1 authentication. When any are missing, the server runs without auth (suitable for local stdio usage).
 
@@ -69,7 +68,7 @@ Tool suffixes reflect side-effect class, making per-tool allow-lists straightfor
 
 ## Tools
 
-Reads are open to all authenticated users; private items are hidden from non-owners without error. Writes and deletes are owner-only. `telemetry_stats` requires the caller to be listed in `GABOS_ADMIN_USERS`.
+Reads are open to all authenticated users; private items are hidden from non-owners without error. Writes and deletes are owner-only.
 
 ### Agents
 
@@ -86,12 +85,12 @@ Agents are domain expert personas stored in the database. Each has a system prom
 
 A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes part of that agent's context.
 
-| Tool               | Description                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Tool               | Description                                                                                                                                                                                        |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `knowledge_search` | Search entries by query (FTS, ranked by relevance) or browse by tag (ordered by recency). At least one of `query` or `tag` required. Returns metadata + score; fetch content via `knowledge_read`. |
-| `knowledge_read`   | Fetch a single entry by `id` (includes full content).                                                             |
-| `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.                    |
-| `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                             |
+| `knowledge_read`   | Fetch a single entry by `id` (includes full content).                                                                                                                                              |
+| `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.                                                                                                     |
+| `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                                                                                                              |
 
 ### Docs (CHM)
 
@@ -110,8 +109,4 @@ rm -rf "$GABOS_CHM_CACHE_DIR/MYAPP/mysource"
 
 ### Telemetry
 
-Every tool call is logged to `GABOS_TELEMETRY_LOG`.
-
-| Tool              | Description                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `telemetry_stats` | Interactive dashboard: call counts by tool and user (bar charts), plus a sortable duration-stats table (min/max/mean/median/std per tool). Admin-only. |
+Every tool call is logged anonymously to `GABOS_TELEMETRY_LOG` (tool name, duration, success/error only — no caller identity is recorded).

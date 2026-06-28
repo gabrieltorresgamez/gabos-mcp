@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from gabos_mcp.tools import agents, chm, knowledge, telemetry
+from gabos_mcp.tools import agents, chm, knowledge
 from gabos_mcp.utils.auth import build_github_auth
 from gabos_mcp.utils.backup import backup_scheduler
 from gabos_mcp.utils.telemetry import TelemetryMiddleware
@@ -41,7 +41,6 @@ mcp.add_middleware(TelemetryMiddleware())
 agents.register(mcp)
 chm.register(mcp)
 knowledge.register(mcp)
-telemetry.register(mcp)
 
 
 @mcp.custom_route("/health", methods=["GET"])
