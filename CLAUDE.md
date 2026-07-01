@@ -61,20 +61,15 @@ the raw upload. No history table — each import fully replaces the row for a gi
 Two tables, both upserted, both FTS5-indexed (trigram, matching the knowledge store's pattern):
 `schema_folders` (one row per folder alias, holding all of that folder's own object groups) and
 `schema_globals` (one row per Global Object, keyed by `(environment, group_type, object_name)`).
-The environment is auto-detected from the export's `Head/ServerName` + `Head/ServerPort` against
-`GABOS_SCHEMA_ENVIRONMENTS`; `schema_import` is gated by a separate admin allowlist
-(`GABOS_SCHEMA_ADMINS`, checked via `utils/auth.is_schema_admin`), distinct from the server-access
-allowlist — an admin must be in both.
-
-The bundled `extractors/schemas/ConfigurationDocumentation.xsd` is OMNITRACKER's own export schema;
-`schema_xml.parse_export` validates against it before normalizing.
+`environment` is passed explicitly to `schema_import` (no auto-detection); `schema_import` is
+gated by a separate admin allowlist (`GABOS_SCHEMA_ADMINS`, checked via `utils/auth.is_schema_admin`),
+distinct from the server-access allowlist — an admin must be in both.
 
 ## Environment Variables
 
 - `GABOS_AGENTS_DB` — agents SQLite DB path (default: `~/.local/share/gabos-mcp/agents.db`)
 - `GABOS_KNOWLEDGE_DB` — knowledge SQLite DB path (default: `~/.local/share/gabos-mcp/knowledge.db`)
 - `GABOS_SCHEMA_DB` — schema SQLite DB path (default: `~/.local/share/gabos-mcp/schema.db`)
-- `GABOS_SCHEMA_ENVIRONMENTS` — JSON mapping of environment name to `ServerName:ServerPort` (default: `{}`)
 - `GABOS_SCHEMA_ADMINS` — comma-separated GitHub logins allowed to run `schema_import` (default: none)
 - `GABOS_CHM_CACHE_DIR` — CHM cache dir (default: `~/.cache/gabos-mcp/chm`); delete subdirs to invalidate
 - `GABOS_BACKUP_DIR` — backup folder (backups disabled when unset)

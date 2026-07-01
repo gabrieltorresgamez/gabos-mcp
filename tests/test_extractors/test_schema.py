@@ -18,38 +18,20 @@ async def store(tmp_path):
 
 @pytest.mark.asyncio
 class TestUpsertFolder:
-	async def test_first_import_reports_all_added(self, store):
-		data = {"Fields": {"Priority": {"alias": "Priority", "sub_type": "Integer"}}}
-		diff = await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", data)
-		assert diff == {"added": ["Fields/Priority"], "changed": [], "removed": []}
-
-	async def test_reimport_unchanged_reports_nothing(self, store):
+	async def test_first_import_is_readable(self, store):
 		data = {"Fields": {"Priority": {"alias": "Priority", "sub_type": "Integer"}}}
 		await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", data)
-		diff = await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", data)
-		assert diff == {"added": [], "changed": [], "removed": []}
+		got = await store.get_folder("dev", "Tickets")
+		assert got["data"] == data
 
-	async def test_reimport_changed_field_reports_changed(self, store):
+	async def test_reimport_overwrites_previous_data(self, store):
 		await store.upsert_folder(
 			"dev", "Tickets", "Tickets", "10.0", {"Fields": {"Priority": {"sub_type": "Integer"}}}
 		)
-		diff = await store.upsert_folder(
-			"dev", "Tickets", "Tickets", "10.1", {"Fields": {"Priority": {"sub_type": "String"}}}
-		)
-		assert diff == {"added": [], "changed": ["Fields/Priority"], "removed": []}
-
-	async def test_reimport_removed_field_reports_removed(self, store):
-		await store.upsert_folder(
-			"dev",
-			"Tickets",
-			"Tickets",
-			"10.0",
-			{"Fields": {"Priority": {"sub_type": "Integer"}, "Owner": {"sub_type": "String"}}},
-		)
-		diff = await store.upsert_folder(
-			"dev", "Tickets", "Tickets", "10.1", {"Fields": {"Priority": {"sub_type": "Integer"}}}
-		)
-		assert diff["removed"] == ["Fields/Owner"]
+		await store.upsert_folder("dev", "Tickets", "Tickets", "10.1", {"Fields": {"Priority": {"sub_type": "String"}}})
+		got = await store.get_folder("dev", "Tickets")
+		assert got["data"] == {"Fields": {"Priority": {"sub_type": "String"}}}
+		assert got["server_version"] == "10.1"
 
 	async def test_separate_environments_are_independent(self, store):
 		await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", {"Fields": {"A": {"sub_type": "x"}}})
@@ -59,19 +41,17 @@ class TestUpsertFolder:
 
 @pytest.mark.asyncio
 class TestUpsertGlobal:
-	async def test_first_import_is_added(self, store):
-		result = await store.upsert_global("dev", "Scripts", "SendNotification", "10.0", {"code": "Dim x"})
-		assert result == "added"
-
-	async def test_reimport_unchanged_is_unchanged(self, store):
+	async def test_first_import_is_readable(self, store):
 		await store.upsert_global("dev", "Scripts", "SendNotification", "10.0", {"code": "Dim x"})
-		result = await store.upsert_global("dev", "Scripts", "SendNotification", "10.0", {"code": "Dim x"})
-		assert result == "unchanged"
+		got = await store.get_global("dev", "Scripts", "SendNotification")
+		assert got["data"] == {"code": "Dim x"}
 
-	async def test_reimport_changed_is_changed(self, store):
+	async def test_reimport_overwrites_previous_data(self, store):
 		await store.upsert_global("dev", "Scripts", "SendNotification", "10.0", {"code": "Dim x"})
-		result = await store.upsert_global("dev", "Scripts", "SendNotification", "10.1", {"code": "Dim y"})
-		assert result == "changed"
+		await store.upsert_global("dev", "Scripts", "SendNotification", "10.1", {"code": "Dim y"})
+		got = await store.get_global("dev", "Scripts", "SendNotification")
+		assert got["data"] == {"code": "Dim y"}
+		assert got["server_version"] == "10.1"
 
 
 @pytest.mark.asyncio

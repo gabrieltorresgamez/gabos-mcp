@@ -83,14 +83,13 @@ async def tools(store, file_upload, make_mcp):
 @pytest.fixture(autouse=True)
 def _env_config(monkeypatch):
 	monkeypatch.setenv("GABOS_SCHEMA_ADMINS", "alice")
-	monkeypatch.setenv("GABOS_SCHEMA_ENVIRONMENTS", json.dumps({"dev": "omni-dev01:4000"}))
 
 
 @pytest.mark.asyncio
 class TestSchemaImport:
 	async def test_admin_can_import(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			result = json.loads(await tools["schema_import"](file_name="export.xml", ctx=FakeCtx()))
+			result = json.loads(await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx()))
 		assert result["environment"] == "dev"
 		assert result["folders_imported"] == 1
 
@@ -99,33 +98,18 @@ class TestSchemaImport:
 			patch("gabos_mcp.tools.schema.get_github_login", return_value="bob"),
 			pytest.raises(PermissionError),
 		):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 
 	async def test_anonymous_denied(self, tools):
 		with (
 			patch("gabos_mcp.tools.schema.get_github_login", return_value="anonymous"),
 			pytest.raises(PermissionError),
 		):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
-
-	async def test_unresolved_environment_returns_actionable_error(self, tools, monkeypatch):
-		monkeypatch.setenv("GABOS_SCHEMA_ENVIRONMENTS", json.dumps({"prod": "other-host:1"}))
-		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			result = json.loads(await tools["schema_import"](file_name="export.xml", ctx=FakeCtx()))
-		assert result["server_identity"] == "omni-dev01:4000"
-		assert result["configured_environments"] == ["prod"]
-
-	async def test_environment_override(self, tools, monkeypatch):
-		monkeypatch.setenv("GABOS_SCHEMA_ENVIRONMENTS", json.dumps({}))
-		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			result = json.loads(
-				await tools["schema_import"](file_name="export.xml", ctx=FakeCtx(), environment="custom")
-			)
-		assert result["environment"] == "custom"
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 
 	async def test_deletes_upload_after_success(self, tools, file_upload):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 		assert file_upload.on_list(FakeCtx()) == []
 
 
@@ -133,7 +117,7 @@ class TestSchemaImport:
 class TestSchemaRead:
 	async def test_authenticated_can_read(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
 		assert result["folder_name"] == "Tickets"
 
@@ -171,7 +155,7 @@ class TestSchemaGlobalsRead:
 class TestSchemaEnvDiff:
 	async def test_compares_environments(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(
 				await tools["schema_env_diff"](folder_alias="Tickets", environment_a="dev", environment_b="test")
 			)
@@ -183,6 +167,6 @@ class TestSchemaEnvDiff:
 class TestSchemaSearch:
 	async def test_finds_imported_field(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", ctx=FakeCtx())
+			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(await tools["schema_search"](query="Priority"))
 		assert len(result) >= 1

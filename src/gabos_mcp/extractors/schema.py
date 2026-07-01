@@ -37,12 +37,6 @@ def _diff_folder_data(
 	return {"added": added, "changed": changed, "removed": removed}
 
 
-def _diff_global_data(old: dict[str, Any] | None, new: dict[str, Any]) -> str:
-	if old is None:
-		return "added"
-	return "changed" if old != new else "unchanged"
-
-
 class SchemaStore(BaseStore):
 	"""Persistent ground-truth schema store.
 
@@ -110,30 +104,18 @@ class SchemaStore(BaseStore):
 		folder_name: str,
 		server_version: str,
 		data: dict[str, dict[str, dict[str, Any]]],
-	) -> dict[str, list[str]]:
-		"""Upsert a folder's normalized snapshot.
-
-		Returns:
-		    An added/changed/removed diff against the row's previous data.
-		"""
+	) -> None:
+		"""Upsert a folder's normalized snapshot, overwriting any previous row."""
 		conn = await self._connect()
-		cursor = await conn.execute(
-			"SELECT data FROM schema_folders WHERE environment = ? AND folder_alias = ?",
-			(environment, folder_alias),
-		)
-		row = await cursor.fetchone()
-		old_data = json.loads(row["data"]) if row else None
-		now = _now()
 		await conn.execute(
 			"INSERT INTO schema_folders (environment, folder_alias, folder_name, server_version, imported_at, data) "
 			"VALUES (?, ?, ?, ?, ?, ?) "
 			"ON CONFLICT(environment, folder_alias) DO UPDATE SET "
 			"folder_name = excluded.folder_name, server_version = excluded.server_version, "
 			"imported_at = excluded.imported_at, data = excluded.data",
-			(environment, folder_alias, folder_name, server_version, now, json.dumps(data)),
+			(environment, folder_alias, folder_name, server_version, _now(), json.dumps(data)),
 		)
 		await conn.commit()
-		return _diff_folder_data(old_data, data)
 
 	async def upsert_global(
 		self,
@@ -142,29 +124,17 @@ class SchemaStore(BaseStore):
 		object_name: str,
 		server_version: str,
 		data: dict[str, Any],
-	) -> str:
-		"""Upsert a Global Object's normalized snapshot.
-
-		Returns:
-		    "added", "changed", or "unchanged" relative to the row's previous data.
-		"""
+	) -> None:
+		"""Upsert a Global Object's normalized snapshot, overwriting any previous row."""
 		conn = await self._connect()
-		cursor = await conn.execute(
-			"SELECT data FROM schema_globals WHERE environment = ? AND group_type = ? AND object_name = ?",
-			(environment, group_type, object_name),
-		)
-		row = await cursor.fetchone()
-		old_data = json.loads(row["data"]) if row else None
-		now = _now()
 		await conn.execute(
 			"INSERT INTO schema_globals (environment, group_type, object_name, server_version, imported_at, data) "
 			"VALUES (?, ?, ?, ?, ?, ?) "
 			"ON CONFLICT(environment, group_type, object_name) DO UPDATE SET "
 			"server_version = excluded.server_version, imported_at = excluded.imported_at, data = excluded.data",
-			(environment, group_type, object_name, server_version, now, json.dumps(data)),
+			(environment, group_type, object_name, server_version, _now(), json.dumps(data)),
 		)
 		await conn.commit()
-		return _diff_global_data(old_data, data)
 
 	async def get_folder(self, environment: str, folder_alias: str) -> dict[str, Any] | None:
 		"""Return the current snapshot for a folder, or None if not found."""

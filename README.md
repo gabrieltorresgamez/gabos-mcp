@@ -20,7 +20,6 @@ Copy `docker-compose.yml-example` to `docker-compose.yml` and configure via envi
 | `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db`        | Knowledge SQLite database path                    |
 | `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`           | Agents SQLite database path                       |
 | `GABOS_SCHEMA_DB`             | `~/.local/share/gabos-mcp/schema.db`           | Schema SQLite database path                       |
-| `GABOS_SCHEMA_ENVIRONMENTS`   | `{}`                                            | JSON mapping of environment name to `ServerName:ServerPort` |
 | `GABOS_SCHEMA_ADMINS`         | _(none — nobody may import)_                    | Comma-separated GitHub logins allowed to run `schema_import` |
 | `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                    | Absolute path to the backup folder                |
 | `GABOS_BACKUP_TIME`           | `02:00`                                        | Time of day to run the backup (24h, local time)   |
@@ -106,14 +105,13 @@ kept, the store always reflects the last import per environment.
 folders and/or Global Objects from the schema tree and export to XML.
 
 **Uploading**: drop the exported XML through the server's file-upload UI ("Schema Import"), then
-ask the assistant to call `schema_import` with the uploaded file's name. The environment is
-auto-detected from the export's `Head/ServerName` + `Head/ServerPort` against
-`GABOS_SCHEMA_ENVIRONMENTS`; pass `environment` explicitly to override it. The raw upload is
-deleted once parsing succeeds — nothing beyond the normalized snapshot is retained.
+ask the assistant to call `schema_import` with the uploaded file's name and the target `environment`
+name (e.g. "dev", "prod"). The raw upload is deleted once parsing succeeds — nothing beyond the
+normalized snapshot is retained.
 
 | Tool                  | Description                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `schema_import`        | Parse an uploaded export XML and upsert it into the schema store. Admin-only (`GABOS_SCHEMA_ADMINS`).              |
+| `schema_import`        | Parse an uploaded export XML and upsert it into the schema store, under a given `environment`. Admin-only (`GABOS_SCHEMA_ADMINS`). |
 | `schema_read`          | Fetch the current normalized snapshot for a folder, by `environment` + `folder_alias`.                             |
 | `schema_globals_read`  | Fetch a Global Object group's snapshot, or one object in it, by `environment` + `group_type` (+ optional `object_name`). |
 | `schema_env_diff`      | Compare two environments' current snapshots for the same folder — catches drift before promotion.                  |

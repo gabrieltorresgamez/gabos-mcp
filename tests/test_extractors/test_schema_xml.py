@@ -10,7 +10,6 @@ from gabos_mcp.extractors.schema_xml import (
 	parse_export,
 	parse_head,
 	parse_xml_bytes,
-	validate_against_xsd,
 )
 
 _SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -101,20 +100,6 @@ class TestCheckRoot:
 		root = parse_xml_bytes(b"<SomethingElse/>")
 		with pytest.raises(SchemaValidationError, match="Unexpected root"):
 			check_root(root)
-
-
-class TestValidateAgainstXsd:
-	def test_valid_document_passes(self):
-		root = parse_xml_bytes(_SAMPLE)
-		validate_against_xsd(root)  # no error
-
-	def test_invalid_document_fails(self):
-		root = parse_xml_bytes(b"""<?xml version="1.0"?>
-        <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
-          <NotAllowedElement/>
-        </ConfigurationDocumentation>""")
-		with pytest.raises(SchemaValidationError, match="XSD validation failed"):
-			validate_against_xsd(root)
 
 
 class TestParseHead:

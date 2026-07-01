@@ -3,12 +3,12 @@
 No MCP dependency — this module only turns raw export bytes into plain
 dataclasses/dicts. Storage lives in ``extractors/schema.py``.
 
-Shape (per the bundled ``ConfigurationDocumentation.xsd``): the document root
-carries ``Head`` (server identity), an optional ``GlobalObjects`` element (flat
-``SchemaObjectGroup`` list), and an optional single top-level ``SchemaObjectGroup``
-representing the folder tree. Every ``SchemaObjectGroup`` groups ``SchemaObject``
-entries under a ``Type`` attribute; a ``SchemaObject`` may itself nest further
-``SchemaObjectGroup`` elements ("normally the Subfolder" per the XSD annotation).
+Shape: the document root carries ``Head`` (server identity), an optional
+``GlobalObjects`` element (flat ``SchemaObjectGroup`` list), and an optional
+single top-level ``SchemaObjectGroup`` representing the folder tree. Every
+``SchemaObjectGroup`` groups ``SchemaObject`` entries under a ``Type``
+attribute; a ``SchemaObject`` may itself nest further ``SchemaObjectGroup``
+elements ("normally the Subfolder").
 
 OMNITRACKER's own convention (confirmed against sample exports) marks the
 folder-tree container with ``Type="Folder"``; that string is the one place
@@ -17,9 +17,7 @@ this module assumes a specific vocabulary rather than reading it generically.
 
 from __future__ import annotations
 
-import functools
 from dataclasses import dataclass, field
-from importlib import resources
 from typing import Any
 
 from lxml import etree
@@ -126,25 +124,6 @@ def check_root(root: etree._Element) -> None:
 		raise SchemaValidationError(
 			f"Unexpected root element {_local_name(root.tag)!r}, expected {_ROOT_LOCAL_NAME!r}."
 		)
-
-
-@functools.cache
-def _xsd_schema() -> etree.XMLSchema:
-	xsd_path = resources.files("gabos_mcp.extractors.schemas").joinpath("ConfigurationDocumentation.xsd")
-	with resources.as_file(xsd_path) as path:
-		return etree.XMLSchema(etree.parse(str(path)))
-
-
-def validate_against_xsd(root: etree._Element) -> None:
-	"""Validate the document against the bundled ConfigurationDocumentation.xsd.
-
-	Raises:
-	    SchemaValidationError: If the document doesn't conform to the schema.
-	"""
-	schema = _xsd_schema()
-	if not schema.validate(root):
-		errors = "; ".join(str(e) for e in schema.error_log)
-		raise SchemaValidationError(f"XSD validation failed: {errors}")
 
 
 def parse_head(root: etree._Element) -> ParsedHead:
@@ -266,20 +245,18 @@ def _normalize_globals(global_objects_elem: etree._Element) -> list[ParsedGlobal
 	return result
 
 
-def parse_export(xml_bytes: bytes, *, validate_xsd: bool = True) -> ParsedExport:
+def parse_export(xml_bytes: bytes) -> ParsedExport:
 	"""Run the full validation + normalization pipeline over a raw export upload.
 
-	Layers applied in order: well-formedness, root/namespace check, XSD
-	validation (bundled ``ConfigurationDocumentation.xsd``), Head sanity check.
-	Every group present in the document — folder tree, Global Objects, or both
-	— is walked and normalized; nothing is filtered by type or size.
+	Layers applied in order: well-formedness, root/namespace check, Head sanity
+	check. Every group present in the document — folder tree, Global Objects,
+	or both — is walked and normalized; nothing is filtered by type or size.
 
-	Any validation layer failing (well-formedness, root check, XSD, Head
-	sanity) propagates its SchemaValidationError to the caller.
+	Any validation layer failing (well-formedness, root check, Head sanity)
+	propagates its SchemaValidationError to the caller.
 
 	Args:
 	    xml_bytes: Raw uploaded file content.
-	    validate_xsd: Set False to skip XSD validation (tests only).
 
 	Returns:
 	    The fully normalized export: head identity, flat folder records, and
@@ -287,8 +264,6 @@ def parse_export(xml_bytes: bytes, *, validate_xsd: bool = True) -> ParsedExport
 	"""
 	root = parse_xml_bytes(xml_bytes)
 	check_root(root)
-	if validate_xsd:
-		validate_against_xsd(root)
 	head = parse_head(root)
 
 	folders: list[ParsedFolder] = []
