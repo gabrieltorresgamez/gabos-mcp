@@ -129,14 +129,9 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		"""
 		_require_authenticated()
 		await store.migrate()
-		folder = await store.get_folder(environment, folder_alias)
+		folder = await store.get_folder_view(environment, folder_alias, categories)
 		if folder is None:
 			raise KeyError(f"No schema snapshot for environment={environment!r} folder_alias={folder_alias!r}.")
-		data = folder.pop("data")
-		if categories is None:
-			folder["categories"] = {category: len(entries) for category, entries in data.items()}
-		else:
-			folder["data"] = {category: entries for category, entries in data.items() if category in categories}
 		return json.dumps(folder, indent=2)
 
 	@mcp.tool

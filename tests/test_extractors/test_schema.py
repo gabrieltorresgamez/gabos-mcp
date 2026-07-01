@@ -69,6 +69,28 @@ class TestGetFolder:
 
 
 @pytest.mark.asyncio
+class TestGetFolderView:
+	async def test_returns_none_when_missing(self, store):
+		assert await store.get_folder_view("dev", "Nope") is None
+
+	async def test_no_categories_returns_summary_counts(self, store):
+		await store.upsert_folder(
+			"dev", "Tickets", "Tickets", "10.0", {"Fields": {"A": {}, "B": {}}, "Permissions": {"C": {}}}
+		)
+		got = await store.get_folder_view("dev", "Tickets")
+		assert got["categories"] == {"Fields": 2, "Permissions": 1}
+		assert "data" not in got
+
+	async def test_categories_returns_full_detail_for_requested_only(self, store):
+		await store.upsert_folder(
+			"dev", "Tickets", "Tickets", "10.0", {"Fields": {"A": {"sub_type": "x"}}, "Permissions": {"C": {}}}
+		)
+		got = await store.get_folder_view("dev", "Tickets", categories=["Fields"])
+		assert got["data"] == {"Fields": {"A": {"sub_type": "x"}}}
+		assert "categories" not in got
+
+
+@pytest.mark.asyncio
 class TestGetGlobal:
 	async def test_single_object(self, store):
 		await store.upsert_global("dev", "Scripts", "SendNotification", "10.0", {"code": "x"})

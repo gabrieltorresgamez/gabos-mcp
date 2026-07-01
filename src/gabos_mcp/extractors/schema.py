@@ -170,6 +170,26 @@ class SchemaStore(BaseStore):
 		row = await cursor.fetchone()
 		return self._row_to_dict(row) if row else None
 
+	async def get_folder_view(
+		self, environment: str, folder_alias: str, categories: list[str] | None = None
+	) -> dict[str, Any] | None:
+		"""Return a folder snapshot shaped for reading: a cheap summary, or full detail for given categories.
+
+		Returns:
+		    None if not found. Otherwise the folder row with "data" replaced by a
+		    "categories" summary (category name -> entry count) when `categories`
+		    is omitted, or by the full detail for just the requested categories.
+		"""
+		folder = await self.get_folder(environment, folder_alias)
+		if folder is None:
+			return None
+		data = folder.pop("data")
+		if categories is None:
+			folder["categories"] = {category: len(entries) for category, entries in data.items()}
+		else:
+			folder["data"] = {category: entries for category, entries in data.items() if category in categories}
+		return folder
+
 	async def get_global(
 		self,
 		environment: str,
