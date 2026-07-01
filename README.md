@@ -122,6 +122,10 @@ attempted (success or failure) — nothing beyond the normalized snapshot is eve
 
 Read tools require authentication (any authenticated user); only `schema_write` is admin-gated.
 
+All four read tools accept an optional `format` param (`"yaml"` | `"json"`), defaulting to
+**`yaml`** — same underlying data, just serialized without JSON's brace/quote/comma overhead. Pass
+`format="json"` for strict JSON (e.g. existing programmatic parsers).
+
 ### Docs (CHM)
 
 Read and search CHM documentation files configured via `GABOS_CHM_FILES`.

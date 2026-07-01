@@ -76,7 +76,11 @@ to their scalar `Rule` text (`_flatten_rule` — the wrapper array is kept only 
 genuinely conditional, multi-item rules). `schema_read` defaults to a cheap summary (category name →
 entry count) and only returns full per-object detail when the caller passes `categories` (e.g.
 `categories=["Fields"]`) — this is a breaking change from the old behavior of always returning the
-full folder dump.
+full folder dump. All four schema read tools (`schema_read`, `schema_globals_read`,
+`schema_diff_read`, `schema_search`) also take a `format` param (`"yaml"` | `"json"`, default
+`"yaml"`) — pure serialization-layer change via `utils/serialization.dump_response`, same underlying
+data either way. This changes the default output format from JSON to YAML; callers with existing
+JSON parsers must pass `format="json"` explicitly to preserve the old behavior.
 
 ## Environment Variables
 

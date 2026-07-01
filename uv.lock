@@ -373,6 +373,7 @@ dependencies = [
     { name = "html2text" },
     { name = "lxml" },
     { name = "platformdirs" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -392,6 +393,7 @@ requires-dist = [
     { name = "html2text", specifier = ">=2025.4.15" },
     { name = "lxml", specifier = ">=6.1.0" },
     { name = "platformdirs", specifier = ">=4.9.6" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [package.metadata.requires-dev]
