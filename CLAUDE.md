@@ -70,6 +70,14 @@ is configured, unlisted names are rejected too, catching typos before they creat
 bucket. `schema_write` is gated by a separate admin allowlist (`GABOS_SCHEMA_ADMINS`, checked via
 `utils/auth.is_schema_admin`), distinct from the server-access allowlist — an admin must be in both.
 
+**Verbosity:** `extractors/schema_xml.py` prunes empty/null keys from every normalized object
+(`_prune_empty`) and collapses single-item `Enabled`/`Mandatory`/`Default value` rule wrappers down
+to their scalar `Rule` text (`_flatten_rule` — the wrapper array is kept only when a field has
+genuinely conditional, multi-item rules). `schema_read` defaults to a cheap summary (category name →
+entry count) and only returns full per-object detail when the caller passes `categories` (e.g.
+`categories=["Fields"]`) — this is a breaking change from the old behavior of always returning the
+full folder dump.
+
 ## Environment Variables
 
 - `GABOS_AGENTS_DB` — agents SQLite DB path (default: `~/.local/share/gabos-mcp/agents.db`)

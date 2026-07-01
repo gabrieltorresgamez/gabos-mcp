@@ -115,7 +115,7 @@ attempted (success or failure) — nothing beyond the normalized snapshot is eve
 | Tool                  | Description                                                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `schema_write`         | Parse an uploaded export XML and upsert it into the schema store, under a given `environment`. Admin-only (`GABOS_SCHEMA_ADMINS`). |
-| `schema_read`          | Fetch the current normalized snapshot for a folder, by `environment` + `folder_alias`.                             |
+| `schema_read`          | Fetch a folder's snapshot, by `environment` + `folder_alias`. Without `categories`, returns a cheap summary (category name → entry count); pass `categories` (e.g. `["Fields"]`) to get full detail for just those categories. |
 | `schema_globals_read`  | Fetch a Global Object group's snapshot, or one object in it, by `environment` + `group_type` (+ optional `object_name`). |
 | `schema_diff_read`     | Compare two environments' current snapshots for the same folder — catches drift before promotion.                  |
 | `schema_search`        | Full-text search over folders and Global Objects by name substring, optionally scoped to one `environment`.        |

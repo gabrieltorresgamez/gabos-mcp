@@ -112,16 +112,24 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		return json.dumps(result, indent=2)
 
 	@mcp.tool
-	async def schema_read(environment: str, folder_alias: str) -> str:
-		"""Fetch the current normalized snapshot for a folder.
+	async def schema_read(environment: str, folder_alias: str, categories: list[str] | None = None) -> str:
+		"""Fetch a folder's normalized snapshot, in full or as a summary.
+
+		Without `categories`, returns a summary only: each category name (Fields,
+		Permissions, Scripts, Forms, Print layouts, Views, etc.) mapped to its entry
+		count — cheap enough to always call first. Pass `categories` to get full
+		detail for just those categories, e.g. `categories=["Fields"]` to see every
+		field without pulling in hundreds of unrelated Permissions/Scripts entries.
 
 		Args:
 		    environment: Environment name (e.g. "dev", "test", "prod").
 		    folder_alias: The folder's alias.
+		    categories: Category names to return in full (e.g. ["Fields", "Scripts"]).
+		        Omit to get the cheap summary (category -> entry count) instead.
 		"""
 		_require_authenticated()
 		await store.migrate()
-		folder = await store.get_folder(environment, folder_alias)
+		folder = await store.get_folder_view(environment, folder_alias, categories)
 		if folder is None:
 			raise KeyError(f"No schema snapshot for environment={environment!r} folder_alias={folder_alias!r}.")
 		return json.dumps(folder, indent=2)

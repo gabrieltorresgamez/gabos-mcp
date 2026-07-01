@@ -18,7 +18,7 @@ this module assumes a specific vocabulary rather than reading it generically.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from lxml import etree
 
@@ -190,25 +190,72 @@ def _normalize_object_attrs(obj_elem: etree._Element) -> dict[str, Any]:
 	return attrs
 
 
+# Field attributes that wrap a rule in an Item list; collapsed to a top-level scalar key
+# when there's exactly one unconditional Item (see `_flatten_rule`).
+_FIELD_RULE_ATTRS: dict[str, tuple[str, ...]] = {
+	"mandatory_condition": ("mandatory", "mandatorycondition"),
+	"enabled_rule": ("enabled",),
+	"default_value": ("default value", "defaultvalue"),
+}
+
+
 def _normalize_object(obj_elem: etree._Element, group_type: str) -> tuple[str, dict[str, Any]]:
 	attrs = _normalize_object_attrs(obj_elem)
 
 	if group_type.strip().lower() == _FIELDS_GROUP_TYPE:
 		attrs["field_type"] = attrs["sub_type"]
-		attrs["mandatory_condition"] = _attr_ci(attrs["attributes"], "mandatory", "mandatorycondition")
 		attrs["full_text"] = _attr_ci(attrs["attributes"], "fulltext", "fulltextindex")
 		attrs["tooltip"] = _attr_ci(attrs["attributes"], "tooltip")
+		for out_key, candidates in _FIELD_RULE_ATTRS.items():
+			attrs[out_key] = _flatten_rule(_attr_ci(attrs["attributes"], *candidates, pop=True))
 
 	key = attrs["alias"] or attrs["name"] or attrs.get("id", "")
-	return key, attrs
+	return key, cast("dict[str, Any]", _prune_value(attrs))
 
 
-def _attr_ci(attributes: dict[str, Any], *candidates: str) -> str | list[dict[str, Any]] | None:
-	lowered = {k.strip().lower(): v for k, v in attributes.items()}
+def _attr_ci(attributes: dict[str, Any], *candidates: str, pop: bool = False) -> str | list[dict[str, Any]] | None:
+	"""Look up an attribute by case-insensitive name, optionally removing it from ``attributes``.
+
+	Returns:
+	    The matching value if found, else None.
+	"""
+	lowered_keys = {k.strip().lower(): k for k in attributes}
 	for candidate in candidates:
-		if candidate in lowered:
-			return lowered[candidate]
+		if candidate in lowered_keys:
+			key = lowered_keys[candidate]
+			return attributes.pop(key) if pop else attributes[key]
 	return None
+
+
+def _flatten_rule(value: str | list[dict[str, Any]] | None) -> str | list[dict[str, Any]] | None:
+	"""Collapse a single-item ``Item``-wrapped rule (Enabled/Mandatory/Default value) to its scalar Rule text.
+
+	OMNITRACKER represents an unconditional rule as one Item carrying a
+	``Rule`` attribute (e.g. ``(Always)``); only genuinely conditional
+	attributes have more than one Item, and those are left as the full list.
+
+	Returns:
+	    The scalar Rule text for the single-item unconditional case, otherwise ``value`` unchanged.
+	"""
+	if isinstance(value, list) and len(value) == 1:
+		rule = value[0].get("attributes", {}).get("Rule")
+		if isinstance(rule, str):
+			return rule
+	return value
+
+
+def _prune_value(value: dict[str, Any] | list[Any] | str | None) -> dict[str, Any] | list[Any] | str | None:
+	"""Recursively drop empty-string/None values from a normalized structure.
+
+	Returns:
+	    The value with empty scalar leaves omitted (containers like ``{}``/``[]`` are kept as-is).
+	"""
+	if isinstance(value, dict):
+		pruned = {k: _prune_value(v) for k, v in value.items()}
+		return {k: v for k, v in pruned.items() if not (v is None or (isinstance(v, str) and not v))}
+	if isinstance(value, list):
+		return [_prune_value(v) for v in value]
+	return value
 
 
 def _normalize_group(group_elem: etree._Element) -> tuple[str, dict[str, dict[str, Any]]]:
