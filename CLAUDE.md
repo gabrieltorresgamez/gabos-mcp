@@ -48,10 +48,35 @@ never hide the agent's own knowledge.
 - `agent:<name>` — global knowledge for this agent
 - `agent:<name>:folder:<key>` — folder/context-specific knowledge
 
+## Schema (ground truth)
+
+`SchemaStore` (`extractors/schema.py`) is a Tier-1 ground-truth complement to `knowledge_*`:
+objective, auto-refreshed facts pulled straight from an OMNITRACKER Export Documentation XML,
+rather than hand-maintained prose. Upload goes through `fastmcp.apps.FileUpload`
+(`utils/uploads.py`'s `SchemaFileUpload`, wired into `server.py` via `mcp.add_provider`) so the raw
+XML never enters the model's context window; `schema_write` reads it server-side, parses/validates
+it (`extractors/schema_xml.py`, pure — no MCP dependency), upserts the normalized result, and deletes
+the raw upload once parsing has been attempted (success or failure — the `finally` around
+`parse_export` guarantees cleanup even on an unexpected exception). No history table — each import
+fully replaces the row for a given key.
+
+Two tables, both upserted, both FTS5-indexed (trigram, matching the knowledge store's pattern):
+`schema_folders` (one row per folder alias, holding all of that folder's own object groups) and
+`schema_globals` (one row per Global Object, keyed by `(environment, group_type, object_name)`).
+`environment` is passed explicitly to `schema_write` — no auto-detection from the export's `Head`
+block — but it's checked against `utils/environments.validate_environment`: blank names are always
+rejected, and if `GABOS_SCHEMA_ENVIRONMENTS` (a plain comma-separated allowlist, not a host mapping)
+is configured, unlisted names are rejected too, catching typos before they create a stray environment
+bucket. `schema_write` is gated by a separate admin allowlist (`GABOS_SCHEMA_ADMINS`, checked via
+`utils/auth.is_schema_admin`), distinct from the server-access allowlist — an admin must be in both.
+
 ## Environment Variables
 
 - `GABOS_AGENTS_DB` — agents SQLite DB path (default: `~/.local/share/gabos-mcp/agents.db`)
 - `GABOS_KNOWLEDGE_DB` — knowledge SQLite DB path (default: `~/.local/share/gabos-mcp/knowledge.db`)
+- `GABOS_SCHEMA_DB` — schema SQLite DB path (default: `~/.local/share/gabos-mcp/schema.db`)
+- `GABOS_SCHEMA_ENVIRONMENTS` — comma-separated allowlist of valid environment names for `schema_write` (default: unset, any non-blank name accepted)
+- `GABOS_SCHEMA_ADMINS` — comma-separated GitHub logins allowed to run `schema_write` (default: none)
 - `GABOS_CHM_CACHE_DIR` — CHM cache dir (default: `~/.cache/gabos-mcp/chm`); delete subdirs to invalidate
 - `GABOS_BACKUP_DIR` — backup folder (backups disabled when unset)
 - `GABOS_BACKUP_TIME` — daily backup time 24h format (default: `02:00`)

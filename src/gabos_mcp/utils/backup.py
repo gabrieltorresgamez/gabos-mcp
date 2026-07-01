@@ -9,13 +9,9 @@ import sqlite3
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-from platformdirs import user_data_path
+from gabos_mcp.utils.stores import db_path, registered_db_names
 
 logger = logging.getLogger(__name__)
-
-
-def _db_path(env_var: str, default_name: str) -> str:
-	return os.environ.get(env_var, str(user_data_path("gabos-mcp") / default_name))
 
 
 def backup_database(source_path: str, dest_path: str) -> None:
@@ -55,8 +51,8 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 	if retention == 0:
 		return
 	cutoff = date.today() - timedelta(days=retention)  # noqa: DTZ011
-	for pattern in ("agents_*.db", "knowledge_*.db"):
-		for f in backup_dir.glob(pattern):
+	for name in registered_db_names():
+		for f in backup_dir.glob(f"{name}_*.db"):
 			try:
 				date_part = f.stem.split("_", 1)[1]
 				file_date = datetime.strptime(date_part, "%Y-%m-%d").date()  # noqa: DTZ007
@@ -74,12 +70,9 @@ async def run_backup(backup_dir: Path) -> bool:
 	    True if all database backups succeeded, False if any failed.
 	"""
 	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
-	dbs = [
-		("agents", _db_path("GABOS_AGENTS_DB", "agents.db")),
-		("knowledge", _db_path("GABOS_KNOWLEDGE_DB", "knowledge.db")),
-	]
 	all_ok = True
-	for name, source in dbs:
+	for name in registered_db_names():
+		source = db_path(name)
 		dest = backup_dir / f"{name}_{today}.db"
 		if dest.exists():
 			logger.info("Today's backup already exists, skipping: %s", dest)
@@ -116,9 +109,9 @@ async def backup_scheduler() -> None:
 	backup_time = _parse_backup_time()
 	logger.info("Backup scheduler active: %s at %s, retention %d days", backup_dir, backup_time, _retention_days())
 
-	# Run immediately on startup if today's backup is missing for either DB.
+	# Run immediately on startup if today's backup is missing for any registered DB.
 	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
-	missing = not (backup_dir / f"agents_{today}.db").exists() or not (backup_dir / f"knowledge_{today}.db").exists()
+	missing = any(not (backup_dir / f"{name}_{today}.db").exists() for name in registered_db_names())
 	if missing:
 		ok = await run_backup(backup_dir)
 		if ok:
