@@ -29,6 +29,46 @@ class BaseStore:
 		row = await cursor.fetchone()
 		return bool(row and row[0] > 0)
 
+	async def _setup_fts5(self, table: str, unindexed_cols: list[str], indexed_cols: list[str]) -> None:
+		"""Create an FTS5 external-content index + sync triggers for ``table``, if absent.
+
+		``unindexed_cols``/``indexed_cols`` must name real columns of ``table`` — FTS5
+		external-content mode (``content='<table>'``) requires the FTS column names to
+		match the source table's column names exactly.
+		"""
+		conn = await self._connect()
+		fts_table = f"{table}_fts"
+		all_cols = [*unindexed_cols, *indexed_cols]
+		col_defs = ", ".join([*(f"{c} UNINDEXED" for c in unindexed_cols), *indexed_cols])
+		col_list = ", ".join(all_cols)
+		new_list = ", ".join(f"new.{c}" for c in all_cols)
+		old_list = ", ".join(f"old.{c}" for c in all_cols)
+
+		await conn.execute(f"""
+			CREATE VIRTUAL TABLE IF NOT EXISTS {fts_table}
+			USING fts5({col_defs}, tokenize='trigram', content='{table}', content_rowid='rowid')
+		""")
+		await conn.execute(f"""
+			CREATE TRIGGER IF NOT EXISTS {table}_fts_insert
+			AFTER INSERT ON {table} BEGIN
+				INSERT INTO {fts_table}(rowid, {col_list}) VALUES (new.rowid, {new_list});
+			END
+		""")
+		await conn.execute(f"""
+			CREATE TRIGGER IF NOT EXISTS {table}_fts_update
+			AFTER UPDATE ON {table} BEGIN
+				INSERT INTO {fts_table}({fts_table}, rowid, {col_list}) VALUES ('delete', old.rowid, {old_list});
+				INSERT INTO {fts_table}(rowid, {col_list}) VALUES (new.rowid, {new_list});
+			END
+		""")
+		await conn.execute(f"""
+			CREATE TRIGGER IF NOT EXISTS {table}_fts_delete
+			AFTER DELETE ON {table} BEGIN
+				INSERT INTO {fts_table}({fts_table}, rowid, {col_list}) VALUES ('delete', old.rowid, {old_list});
+			END
+		""")
+		await conn.execute(f"INSERT INTO {fts_table}({fts_table}) VALUES('rebuild')")
+
 	async def close(self) -> None:
 		"""Close the database connection and release the background thread."""
 		if self._conn is not None:

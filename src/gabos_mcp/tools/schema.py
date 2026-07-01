@@ -49,8 +49,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    ctx: Injected request context (session scoping for the uploaded file).
 		    environment: Explicit environment name, bypassing auto-detection.
 		"""
-		user = get_github_login()
-		if user == "anonymous" or not is_schema_admin(user):
+		user = _require_authenticated()
+		if not is_schema_admin(user):
 			raise PermissionError("Only schema admins may import schema exports.")
 		await store.migrate()
 

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
+
+import aiosqlite
 
 from gabos_mcp.extractors.base import BaseStore
 from gabos_mcp.utils.db import now as _now
+from gabos_mcp.utils.db import sanitize_fts_query
 
 
 def _flatten(data: dict[str, dict[str, dict[str, Any]]]) -> dict[str, dict[str, Any]]:
@@ -49,6 +51,12 @@ class SchemaStore(BaseStore):
 	Global Object). Both are upserted on conflict — no history, no merge.
 	"""
 
+	@staticmethod
+	def _row_to_dict(row: aiosqlite.Row) -> dict[str, Any]:
+		d = dict(row)
+		d["data"] = json.loads(d["data"])
+		return d
+
 	async def migrate(self) -> None:
 		"""Create tables and FTS indices if they do not exist."""
 		if self._migrated:
@@ -76,64 +84,8 @@ class SchemaStore(BaseStore):
                 PRIMARY KEY (environment, group_type, object_name)
             )
         """)
-		await conn.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS schema_folders_fts
-            USING fts5(folder_alias UNINDEXED, folder_name, data,
-                       tokenize='trigram', content='schema_folders', content_rowid='rowid')
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_folders_fts_insert
-            AFTER INSERT ON schema_folders BEGIN
-                INSERT INTO schema_folders_fts(rowid, folder_alias, folder_name, data)
-                VALUES (new.rowid, new.folder_alias, new.folder_name, new.data);
-            END
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_folders_fts_update
-            AFTER UPDATE ON schema_folders BEGIN
-                INSERT INTO schema_folders_fts(schema_folders_fts, rowid, folder_alias, folder_name, data)
-                VALUES ('delete', old.rowid, old.folder_alias, old.folder_name, old.data);
-                INSERT INTO schema_folders_fts(rowid, folder_alias, folder_name, data)
-                VALUES (new.rowid, new.folder_alias, new.folder_name, new.data);
-            END
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_folders_fts_delete
-            AFTER DELETE ON schema_folders BEGIN
-                INSERT INTO schema_folders_fts(schema_folders_fts, rowid, folder_alias, folder_name, data)
-                VALUES ('delete', old.rowid, old.folder_alias, old.folder_name, old.data);
-            END
-        """)
-		await conn.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS schema_globals_fts
-            USING fts5(group_type, object_name, data,
-                       tokenize='trigram', content='schema_globals', content_rowid='rowid')
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_globals_fts_insert
-            AFTER INSERT ON schema_globals BEGIN
-                INSERT INTO schema_globals_fts(rowid, group_type, object_name, data)
-                VALUES (new.rowid, new.group_type, new.object_name, new.data);
-            END
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_globals_fts_update
-            AFTER UPDATE ON schema_globals BEGIN
-                INSERT INTO schema_globals_fts(schema_globals_fts, rowid, group_type, object_name, data)
-                VALUES ('delete', old.rowid, old.group_type, old.object_name, old.data);
-                INSERT INTO schema_globals_fts(rowid, group_type, object_name, data)
-                VALUES (new.rowid, new.group_type, new.object_name, new.data);
-            END
-        """)
-		await conn.execute("""
-            CREATE TRIGGER IF NOT EXISTS schema_globals_fts_delete
-            AFTER DELETE ON schema_globals BEGIN
-                INSERT INTO schema_globals_fts(schema_globals_fts, rowid, group_type, object_name, data)
-                VALUES ('delete', old.rowid, old.group_type, old.object_name, old.data);
-            END
-        """)
-		await conn.execute("INSERT INTO schema_folders_fts(schema_folders_fts) VALUES('rebuild')")
-		await conn.execute("INSERT INTO schema_globals_fts(schema_globals_fts) VALUES('rebuild')")
+		await self._setup_fts5("schema_folders", unindexed_cols=["folder_alias"], indexed_cols=["folder_name", "data"])
+		await self._setup_fts5("schema_globals", unindexed_cols=[], indexed_cols=["group_type", "object_name", "data"])
 		await conn.commit()
 		self._migrated = True
 
@@ -222,11 +174,7 @@ class SchemaStore(BaseStore):
 			(environment, folder_alias),
 		)
 		row = await cursor.fetchone()
-		if row is None:
-			return None
-		d = dict(row)
-		d["data"] = json.loads(d["data"])
-		return d
+		return self._row_to_dict(row) if row else None
 
 	async def get_global(
 		self,
@@ -242,23 +190,14 @@ class SchemaStore(BaseStore):
 				(environment, group_type, object_name),
 			)
 			row = await cursor.fetchone()
-			if row is None:
-				return None
-			d = dict(row)
-			d["data"] = json.loads(d["data"])
-			return d
+			return self._row_to_dict(row) if row else None
 
 		cursor = await conn.execute(
 			"SELECT * FROM schema_globals WHERE environment = ? AND group_type = ? ORDER BY object_name",
 			(environment, group_type),
 		)
 		rows = await cursor.fetchall()
-		result = []
-		for r in rows:
-			d = dict(r)
-			d["data"] = json.loads(d["data"])
-			result.append(d)
-		return result
+		return [self._row_to_dict(r) for r in rows]
 
 	async def diff_env(self, folder_alias: str, environment_a: str, environment_b: str) -> dict[str, Any]:
 		"""Compare two environments' current live snapshots for the same folder.
@@ -291,17 +230,12 @@ class SchemaStore(BaseStore):
 		    Matching rows (folders and/or globals) ordered by FTS5 rank, best first.
 		"""
 		conn = await self._connect()
-		fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
+		fts_query = sanitize_fts_query(query)
 
 		folder_env_clause = "AND f.environment = ? " if environment else ""
 		global_env_clause = "AND g.environment = ? " if environment else ""
-		params: list[Any] = [fts_query]
-		if environment:
-			params.append(environment)
-		params.append(fts_query)
-		if environment:
-			params.append(environment)
-		params.extend([limit, offset])
+		env_params = [environment] if environment else []
+		params: list[Any] = [fts_query, *env_params, fts_query, *env_params, limit, offset]
 
 		cursor = await conn.execute(
 			"SELECT 'folder' AS kind, f.environment AS environment, f.folder_alias AS key1, "

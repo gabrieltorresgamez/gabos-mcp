@@ -17,6 +17,11 @@ def get_github_login() -> str:
 	return (token.claims.get("login") or "anonymous").lower()
 
 
+def _parse_allowlist(env_var: str) -> set[str]:
+	raw = os.getenv(env_var, "")
+	return {u.strip().lower() for u in raw.split(",") if u.strip()}
+
+
 def is_schema_admin(login: str) -> bool:
 	"""Return True if the given GitHub login is configured as a schema admin.
 
@@ -24,9 +29,7 @@ def is_schema_admin(login: str) -> bool:
 	the server-access allowlist (GITHUB_ALLOWED_USERS) — an admin must also be
 	in that allowlist to reach the server, but not every allowed user is an admin.
 	"""
-	raw = os.getenv("GABOS_SCHEMA_ADMINS", "")
-	admins = {u.strip().lower() for u in raw.split(",") if u.strip()}
-	return login.lower() in admins
+	return login.lower() in _parse_allowlist("GABOS_SCHEMA_ADMINS")
 
 
 def build_github_auth():  # noqa: ANN201
@@ -44,8 +47,7 @@ def build_github_auth():  # noqa: ANN201
 
 	from fastmcp.server.auth.providers.github import GitHubProvider, GitHubTokenVerifier  # noqa: PLC0415
 
-	allowed_users_raw = os.getenv("GITHUB_ALLOWED_USERS", "")
-	allowed_users = {u.strip().lower() for u in allowed_users_raw.split(",") if u.strip()}
+	allowed_users = _parse_allowlist("GITHUB_ALLOWED_USERS")
 
 	provider = GitHubProvider(
 		client_id=client_id,

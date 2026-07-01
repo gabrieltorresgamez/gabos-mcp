@@ -17,6 +17,7 @@ this module assumes a specific vocabulary rather than reading it generically.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Any
@@ -127,15 +128,20 @@ def check_root(root: etree._Element) -> None:
 		)
 
 
+@functools.cache
+def _xsd_schema() -> etree.XMLSchema:
+	xsd_path = resources.files("gabos_mcp.extractors.schemas").joinpath("ConfigurationDocumentation.xsd")
+	with resources.as_file(xsd_path) as path:
+		return etree.XMLSchema(etree.parse(str(path)))
+
+
 def validate_against_xsd(root: etree._Element) -> None:
 	"""Validate the document against the bundled ConfigurationDocumentation.xsd.
 
 	Raises:
 	    SchemaValidationError: If the document doesn't conform to the schema.
 	"""
-	xsd_path = resources.files("gabos_mcp.extractors.schemas").joinpath("ConfigurationDocumentation.xsd")
-	with resources.as_file(xsd_path) as path:
-		schema = etree.XMLSchema(etree.parse(str(path)))
+	schema = _xsd_schema()
 	if not schema.validate(root):
 		errors = "; ".join(str(e) for e in schema.error_log)
 		raise SchemaValidationError(f"XSD validation failed: {errors}")
@@ -183,25 +189,18 @@ def _normalize_attribute(attr_elem: etree._Element) -> str | list[dict[str, Any]
 		return [_normalize_item(i) for i in items]
 	nested_objects = _iter_children(attr_elem, "SchemaObject")
 	if nested_objects:
-		return [_normalize_object(o, group_type="")[1] for o in nested_objects]
+		return [_normalize_object_attrs(o) for o in nested_objects]
 	return (attr_elem.text or "").strip()
 
 
-def _normalize_object(obj_elem: etree._Element, group_type: str) -> tuple[str, dict[str, Any]]:
-	name = _mandatory_text(obj_elem, "Name")
-	alias = _mandatory_text(obj_elem, "Alias")
-	description = _mandatory_text(obj_elem, "Description")
-	sub_type = _mandatory_text(obj_elem, "SubType")
-	inherited = _mandatory_text(obj_elem, "Inherited")
-	attributes = {a.get("Name") or "": _normalize_attribute(a) for a in _iter_children(obj_elem, "Attribute")}
-
+def _normalize_object_attrs(obj_elem: etree._Element) -> dict[str, Any]:
 	attrs: dict[str, Any] = {
-		"name": name,
-		"alias": alias,
-		"description": description,
-		"sub_type": sub_type,
-		"inherited": inherited,
-		"attributes": attributes,
+		"name": _mandatory_text(obj_elem, "Name"),
+		"alias": _mandatory_text(obj_elem, "Alias"),
+		"description": _mandatory_text(obj_elem, "Description"),
+		"sub_type": _mandatory_text(obj_elem, "SubType"),
+		"inherited": _mandatory_text(obj_elem, "Inherited"),
+		"attributes": {a.get("Name") or "": _normalize_attribute(a) for a in _iter_children(obj_elem, "Attribute")},
 	}
 	obj_id = obj_elem.get("id")
 	if obj_id:
@@ -209,14 +208,19 @@ def _normalize_object(obj_elem: etree._Element, group_type: str) -> tuple[str, d
 	active = obj_elem.get("active")
 	if active:
 		attrs["active"] = active
+	return attrs
+
+
+def _normalize_object(obj_elem: etree._Element, group_type: str) -> tuple[str, dict[str, Any]]:
+	attrs = _normalize_object_attrs(obj_elem)
 
 	if group_type.strip().lower() == _FIELDS_GROUP_TYPE:
-		attrs["field_type"] = sub_type
-		attrs["mandatory_condition"] = _attr_ci(attributes, "mandatory", "mandatorycondition")
-		attrs["full_text"] = _attr_ci(attributes, "fulltext", "fulltextindex")
-		attrs["tooltip"] = _attr_ci(attributes, "tooltip")
+		attrs["field_type"] = attrs["sub_type"]
+		attrs["mandatory_condition"] = _attr_ci(attrs["attributes"], "mandatory", "mandatorycondition")
+		attrs["full_text"] = _attr_ci(attrs["attributes"], "fulltext", "fulltextindex")
+		attrs["tooltip"] = _attr_ci(attrs["attributes"], "tooltip")
 
-	key = alias or name or obj_id or ""
+	key = attrs["alias"] or attrs["name"] or attrs.get("id", "")
 	return key, attrs
 
 

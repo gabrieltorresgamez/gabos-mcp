@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 
 import aiosqlite
 
 from gabos_mcp.extractors.base import BaseStore
 from gabos_mcp.utils.db import now as _now
+from gabos_mcp.utils.db import sanitize_fts_query
 
 
 class KnowledgeStore(BaseStore):
@@ -144,7 +144,7 @@ class KnowledgeStore(BaseStore):
 				(*visibility_params, *owner_params, *tag_params, limit, offset),
 			)
 		else:
-			fts_query = re.sub(r"[^\w\s]", " ", query).strip() or '""'
+			fts_query = sanitize_fts_query(query)
 			cursor = await conn.execute(
 				"SELECT k.*, knowledge_fts.rank AS score FROM knowledge_fts "
 				"JOIN knowledge k ON knowledge_fts.rowid = k.rowid "
