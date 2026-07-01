@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from fastmcp.server.context import Context
+
 from gabos_mcp.extractors.schema_xml import SchemaValidationError, parse_export
 from gabos_mcp.utils.auth import get_github_login, is_schema_admin
 from gabos_mcp.utils.environments import UnknownEnvironmentError, validate_environment
@@ -13,7 +15,6 @@ from gabos_mcp.utils.uploads import get_schema_file_upload
 
 if TYPE_CHECKING:
 	from fastmcp import FastMCP
-	from fastmcp.server.context import Context
 
 
 def _require_authenticated() -> str:
