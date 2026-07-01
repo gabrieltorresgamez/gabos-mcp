@@ -13,6 +13,9 @@ services:
       GABOS_CHM_CACHE_DIR: /data/chm-cache
       GABOS_KNOWLEDGE_DB: /data/knowledge.db
       GABOS_AGENTS_DB: /data/agents.db
+      GABOS_SCHEMA_DB: /data/schema.db
+      # GABOS_SCHEMA_ENVIRONMENTS: dev,test,prod
+      # GABOS_SCHEMA_ADMINS: user1,user2
       # GABOS_BACKUP_DIR: /data/backups
       # GABOS_BACKUP_TIME: 02:00
       # GABOS_BACKUP_RETENTION_DAYS: 30
