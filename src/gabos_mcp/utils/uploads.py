@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import functools
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from fastmcp.apps.file_upload import FileUpload
+
+from gabos_mcp.utils.auth import get_github_login
 
 if TYPE_CHECKING:
 	from fastmcp.server.context import Context
@@ -21,6 +23,23 @@ class SchemaFileUpload(FileUpload):
 	same-store accessor that bypasses that truncation, plus a way to forget
 	a file once it's been successfully imported (raw uploads are temp-only).
 	"""
+
+	@override
+	def _get_scope_key(self, ctx: Context) -> str:
+		"""Scope uploads by authenticated GitHub login instead of transport session ID.
+
+		The base class partitions storage by ``ctx.session_id``, which is only
+		stable within one live connection. The upload widget calls ``store_files``
+		via its own UI action, a different request path than the assistant's plain
+		tool calls (e.g. ``schema_write``) — a reconnect or token refresh between
+		the two can silently swap in a new session ID, orphaning the uploaded file
+		before it's ever read. Login is resolved from the (already-required) auth
+		token on every request regardless of session/transport churn.
+
+		Returns:
+		    The authenticated caller's lowercased GitHub login, or "anonymous".
+		"""
+		return get_github_login()
 
 	def get_raw_bytes(self, name: str, ctx: Context) -> bytes:
 		"""Return the full decoded bytes of an uploaded file.
