@@ -34,10 +34,13 @@ class BaseStore:
 
 		``unindexed_cols``/``indexed_cols`` must name real columns of ``table`` — FTS5
 		external-content mode (``content='<table>'``) requires the FTS column names to
-		match the source table's column names exactly.
+		match the source table's column names exactly. The index is only rebuilt the
+		first time the table is created, not on every call (e.g. every process restart).
 		"""
 		conn = await self._connect()
 		fts_table = f"{table}_fts"
+		cursor = await conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (fts_table,))
+		already_exists = await cursor.fetchone() is not None
 		all_cols = [*unindexed_cols, *indexed_cols]
 		col_defs = ", ".join([*(f"{c} UNINDEXED" for c in unindexed_cols), *indexed_cols])
 		col_list = ", ".join(all_cols)
@@ -67,7 +70,8 @@ class BaseStore:
 				INSERT INTO {fts_table}({fts_table}, rowid, {col_list}) VALUES ('delete', old.rowid, {old_list});
 			END
 		""")
-		await conn.execute(f"INSERT INTO {fts_table}({fts_table}) VALUES('rebuild')")
+		if not already_exists:
+			await conn.execute(f"INSERT INTO {fts_table}({fts_table}) VALUES('rebuild')")
 
 	async def close(self) -> None:
 		"""Close the database connection and release the background thread."""

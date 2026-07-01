@@ -17,7 +17,7 @@ class SchemaFileUpload(FileUpload):
 
 	The base class truncates non-text uploads (XML included) to a 200-byte
 	preview in ``on_read``, since it's designed for the model to skim files.
-	schema_import needs the full document, so this subclass adds a
+	schema_write needs the full document, so this subclass adds a
 	same-store accessor that bypasses that truncation, plus a way to forget
 	a file once it's been successfully imported (raw uploads are temp-only).
 	"""
@@ -49,7 +49,7 @@ def get_schema_file_upload() -> SchemaFileUpload:
 		title="OMNITRACKER Schema Import",
 		description=(
 			"Drop an OMNITRACKER Export Documentation XML file here, then ask "
-			"the assistant to import it via schema_import."
+			"the assistant to import it via schema_write."
 		),
 		max_file_size=250 * 1024 * 1024,
 	)

@@ -232,7 +232,7 @@ def _collect_folders(obj_elem: etree._Element, out: list[ParsedFolder]) -> None:
 				_collect_folders(sub_obj, out)
 		else:
 			key, objects = _normalize_group(group_elem)
-			data[key] = objects
+			data.setdefault(key, {}).update(objects)
 	out.append(ParsedFolder(alias=alias, name=name, data=data))
 
 

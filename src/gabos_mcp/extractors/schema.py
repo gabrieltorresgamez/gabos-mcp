@@ -104,8 +104,14 @@ class SchemaStore(BaseStore):
 		folder_name: str,
 		server_version: str,
 		data: dict[str, dict[str, dict[str, Any]]],
+		*,
+		commit: bool = True,
 	) -> None:
-		"""Upsert a folder's normalized snapshot, overwriting any previous row."""
+		"""Upsert a folder's normalized snapshot, overwriting any previous row.
+
+		Pass ``commit=False`` to batch several upserts into one caller-driven
+		``commit()`` (e.g. importing hundreds of folders in one transaction).
+		"""
 		conn = await self._connect()
 		await conn.execute(
 			"INSERT INTO schema_folders (environment, folder_alias, folder_name, server_version, imported_at, data) "
@@ -115,7 +121,8 @@ class SchemaStore(BaseStore):
 			"imported_at = excluded.imported_at, data = excluded.data",
 			(environment, folder_alias, folder_name, server_version, _now(), json.dumps(data)),
 		)
-		await conn.commit()
+		if commit:
+			await conn.commit()
 
 	async def upsert_global(
 		self,
@@ -124,8 +131,14 @@ class SchemaStore(BaseStore):
 		object_name: str,
 		server_version: str,
 		data: dict[str, Any],
+		*,
+		commit: bool = True,
 	) -> None:
-		"""Upsert a Global Object's normalized snapshot, overwriting any previous row."""
+		"""Upsert a Global Object's normalized snapshot, overwriting any previous row.
+
+		Pass ``commit=False`` to batch several upserts into one caller-driven
+		``commit()`` (e.g. importing hundreds of Global Objects in one transaction).
+		"""
 		conn = await self._connect()
 		await conn.execute(
 			"INSERT INTO schema_globals (environment, group_type, object_name, server_version, imported_at, data) "
@@ -134,6 +147,12 @@ class SchemaStore(BaseStore):
 			"server_version = excluded.server_version, imported_at = excluded.imported_at, data = excluded.data",
 			(environment, group_type, object_name, server_version, _now(), json.dumps(data)),
 		)
+		if commit:
+			await conn.commit()
+
+	async def commit(self) -> None:
+		"""Commit any pending writes made with ``commit=False``."""
+		conn = await self._connect()
 		await conn.commit()
 
 	async def get_folder(self, environment: str, folder_alias: str) -> dict[str, Any] | None:
@@ -202,9 +221,9 @@ class SchemaStore(BaseStore):
 		conn = await self._connect()
 		fts_query = sanitize_fts_query(query)
 
-		folder_env_clause = "AND f.environment = ? " if environment else ""
-		global_env_clause = "AND g.environment = ? " if environment else ""
-		env_params = [environment] if environment else []
+		folder_env_clause = "AND f.environment = ? " if environment is not None else ""
+		global_env_clause = "AND g.environment = ? " if environment is not None else ""
+		env_params = [environment] if environment is not None else []
 		params: list[Any] = [fts_query, *env_params, fts_query, *env_params, limit, offset]
 
 		cursor = await conn.execute(

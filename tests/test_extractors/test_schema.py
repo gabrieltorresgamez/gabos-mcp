@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 import pytest_asyncio
 
@@ -123,6 +125,13 @@ class TestSearch:
 		results = await store.search("Priority", environment="dev")
 		assert all(r["environment"] == "dev" for r in results)
 
+	async def test_empty_string_environment_is_not_treated_as_no_filter(self, store):
+		await store.upsert_folder(
+			"dev", "Tickets", "Tickets", "10.0", {"Fields": {"Priority": {"sub_type": "Integer"}}}
+		)
+		results = await store.search("Priority", environment="")
+		assert results == []
+
 
 @pytest.mark.asyncio
 class TestGetLastSeenVersion:
@@ -132,3 +141,27 @@ class TestGetLastSeenVersion:
 	async def test_returns_latest_version(self, store):
 		await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", {})
 		assert await store.get_last_seen_version("dev") == "10.0"
+
+
+@pytest.mark.asyncio
+class TestBatchedCommit:
+	async def test_commit_false_defers_until_explicit_commit(self, tmp_path):
+		db_path = str(tmp_path / "schema.db")
+		store = SchemaStore(db_path=db_path)
+		await store.migrate()
+
+		await store.upsert_folder("dev", "Tickets", "Tickets", "10.0", {}, commit=False)
+		other = sqlite3.connect(db_path)
+		try:
+			assert other.execute("SELECT COUNT(*) FROM schema_folders").fetchone()[0] == 0
+		finally:
+			other.close()
+
+		await store.commit()
+		other = sqlite3.connect(db_path)
+		try:
+			assert other.execute("SELECT COUNT(*) FROM schema_folders").fetchone()[0] == 1
+		finally:
+			other.close()
+
+		await store.close()

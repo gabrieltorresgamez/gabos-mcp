@@ -190,3 +190,33 @@ class TestParseExport:
 		parsed = parse_export(_SAMPLE)
 		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
 		assert tickets.name == "Tickets"
+
+	def test_duplicate_sibling_group_type_merges_instead_of_overwriting(self):
+		root = b"""<?xml version="1.0"?>
+        <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
+          <Head>
+            <ServerName>x</ServerName><ServerPort>1</ServerPort><ServerVersion>1</ServerVersion>
+            <Date/><User/><Language/>
+          </Head>
+          <SchemaObjectGroup Type="Folder">
+            <SchemaObject id="1">
+              <Name>Tickets</Name><Alias>Tickets</Alias><Description/>
+              <SubType IsNotUsed="Yes"></SubType><Inherited>No</Inherited>
+              <SchemaObjectGroup Type="Fields">
+                <SchemaObject id="100">
+                  <Name>Priority</Name><Alias>Priority</Alias><Description/>
+                  <SubType>Integer</SubType><Inherited>No</Inherited>
+                </SchemaObject>
+              </SchemaObjectGroup>
+              <SchemaObjectGroup Type="Fields">
+                <SchemaObject id="101">
+                  <Name>Owner</Name><Alias>Owner</Alias><Description/>
+                  <SubType>String</SubType><Inherited>No</Inherited>
+                </SchemaObject>
+              </SchemaObjectGroup>
+            </SchemaObject>
+          </SchemaObjectGroup>
+        </ConfigurationDocumentation>"""
+		parsed = parse_export(root)
+		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
+		assert set(tickets.data["Fields"]) == {"Priority", "Owner"}

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from gabos_mcp.extractors.schema_xml import SchemaValidationError, parse_export
 from gabos_mcp.utils.auth import get_github_login, is_schema_admin
+from gabos_mcp.utils.environments import UnknownEnvironmentError, validate_environment
 from gabos_mcp.utils.stores import get_schema_store
 from gabos_mcp.utils.uploads import get_schema_file_upload
 
@@ -28,16 +29,21 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 	file_upload = get_schema_file_upload()
 
 	@mcp.tool
-	async def schema_import(file_name: str, environment: str, ctx: Context) -> str:
+	async def schema_write(file_name: str, environment: str, ctx: Context) -> str:
 		"""Parse an uploaded OMNITRACKER Export Documentation XML and upsert it into the schema store.
 
 		Upload the XML via the Schema Import file-upload UI first, then call this
 		with the uploaded file's name. Admin-only (GABOS_SCHEMA_ADMINS).
 
+		environment must be non-blank, and must be one of GABOS_SCHEMA_ENVIRONMENTS
+		if that allowlist is configured — this catches typos before they create a
+		stray, permanently separate environment bucket.
+
 		Every folder and Global Object group present in the export is normalized
 		and stored — nothing is filtered by type or size. Re-importing a
-		folder/object overwrites its row. The raw upload is deleted after a
-		successful import; nothing is retained beyond the normalized snapshot.
+		folder/object overwrites its row. The raw upload is deleted once parsing
+		has been attempted (success or failure); nothing is retained beyond the
+		normalized snapshot.
 
 		Args:
 		    file_name: Name of a file previously uploaded via the file-upload UI.
@@ -47,6 +53,14 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		user = _require_authenticated()
 		if not is_schema_admin(user):
 			raise PermissionError("Only schema admins may import schema exports.")
+
+		try:
+			validate_environment(environment)
+		except UnknownEnvironmentError as e:
+			return json.dumps(
+				{"error": str(e), "environment": e.environment, "known_environments": e.known_environments}
+			)
+
 		await store.migrate()
 
 		raw_bytes = file_upload.get_raw_bytes(file_name, ctx)
@@ -55,6 +69,8 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 			parsed = parse_export(raw_bytes)
 		except SchemaValidationError as e:
 			return json.dumps({"error": str(e)})
+		finally:
+			file_upload.forget(file_name, ctx)
 
 		previous_version = await store.get_last_seen_version(environment)
 
@@ -65,6 +81,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				folder_name=folder.name,
 				server_version=parsed.head.server_version,
 				data=folder.data,
+				commit=False,
 			)
 
 		for obj in parsed.globals:
@@ -74,9 +91,10 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				object_name=obj.object_name,
 				server_version=parsed.head.server_version,
 				data=obj.data,
+				commit=False,
 			)
 
-		file_upload.forget(file_name, ctx)
+		await store.commit()
 
 		result = {
 			"environment": environment,
@@ -123,7 +141,7 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		return json.dumps(result, indent=2)
 
 	@mcp.tool
-	async def schema_env_diff(folder_alias: str, environment_a: str, environment_b: str) -> str:
+	async def schema_diff_read(folder_alias: str, environment_a: str, environment_b: str) -> str:
 		"""Compare two environments' current snapshots for the same folder.
 
 		Args:

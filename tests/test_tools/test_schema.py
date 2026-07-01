@@ -1,4 +1,4 @@
-"""Tests for schema_import, schema_read, schema_globals_read, schema_env_diff, schema_search."""
+"""Tests for schema_write, schema_read, schema_globals_read, schema_diff_read, schema_search."""
 
 from __future__ import annotations
 
@@ -86,10 +86,10 @@ def _env_config(monkeypatch):
 
 
 @pytest.mark.asyncio
-class TestSchemaImport:
+class TestSchemaWrite:
 	async def test_admin_can_import(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			result = json.loads(await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx()))
+			result = json.loads(await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx()))
 		assert result["environment"] == "dev"
 		assert result["folders_imported"] == 1
 
@@ -98,26 +98,49 @@ class TestSchemaImport:
 			patch("gabos_mcp.tools.schema.get_github_login", return_value="bob"),
 			pytest.raises(PermissionError),
 		):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 
 	async def test_anonymous_denied(self, tools):
 		with (
 			patch("gabos_mcp.tools.schema.get_github_login", return_value="anonymous"),
 			pytest.raises(PermissionError),
 		):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 
 	async def test_deletes_upload_after_success(self, tools, file_upload):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 		assert file_upload.on_list(FakeCtx()) == []
+
+	async def test_blank_environment_returns_actionable_error(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			result = json.loads(await tools["schema_write"](file_name="export.xml", environment="", ctx=FakeCtx()))
+		assert "error" in result
+
+	async def test_environment_outside_allowlist_returns_actionable_error(self, tools, monkeypatch):
+		monkeypatch.setenv("GABOS_SCHEMA_ENVIRONMENTS", "dev,prod")
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			result = json.loads(await tools["schema_write"](file_name="export.xml", environment="pordu", ctx=FakeCtx()))
+		assert result["environment"] == "pordu"
+		assert result["known_environments"] == ["dev", "prod"]
+
+	async def test_deletes_upload_even_when_parse_fails(self, tools, file_upload):
+		bad = b"<not><closed>"
+		file_upload.on_store(
+			[{"name": "bad.xml", "size": len(bad), "type": "text/xml", "data": base64.b64encode(bad).decode()}],
+			cast("Context", FakeCtx()),
+		)
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			result = json.loads(await tools["schema_write"](file_name="bad.xml", environment="dev", ctx=FakeCtx()))
+		assert "error" in result
+		assert all(f["name"] != "bad.xml" for f in file_upload.on_list(FakeCtx()))
 
 
 @pytest.mark.asyncio
 class TestSchemaRead:
 	async def test_authenticated_can_read(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
 		assert result["folder_name"] == "Tickets"
 
@@ -152,12 +175,12 @@ class TestSchemaGlobalsRead:
 
 
 @pytest.mark.asyncio
-class TestSchemaEnvDiff:
+class TestSchemaDiffRead:
 	async def test_compares_environments(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(
-				await tools["schema_env_diff"](folder_alias="Tickets", environment_a="dev", environment_b="test")
+				await tools["schema_diff_read"](folder_alias="Tickets", environment_a="dev", environment_b="test")
 			)
 		assert result["found_in_a"] is True
 		assert result["found_in_b"] is False
@@ -167,6 +190,6 @@ class TestSchemaEnvDiff:
 class TestSchemaSearch:
 	async def test_finds_imported_field(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			await tools["schema_import"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
 			result = json.loads(await tools["schema_search"](query="Priority"))
 		assert len(result) >= 1
