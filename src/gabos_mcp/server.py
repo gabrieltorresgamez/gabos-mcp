@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 
-from gabos_mcp.tools import agents, chm, knowledge
+from gabos_mcp.tools import agents, chm, knowledge, schema
 from gabos_mcp.utils.auth import build_github_auth
 from gabos_mcp.utils.backup import backup_scheduler
 from gabos_mcp.utils.telemetry import TelemetryMiddleware
+from gabos_mcp.utils.uploads import get_schema_file_upload
 
 if TYPE_CHECKING:
 	from collections.abc import AsyncGenerator
@@ -41,6 +42,8 @@ mcp.add_middleware(TelemetryMiddleware())
 agents.register(mcp)
 chm.register(mcp)
 knowledge.register(mcp)
+schema.register(mcp)
+mcp.add_provider(get_schema_file_upload())
 
 
 @mcp.custom_route("/health", methods=["GET"])

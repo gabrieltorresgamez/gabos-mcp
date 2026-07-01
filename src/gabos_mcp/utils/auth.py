@@ -17,6 +17,18 @@ def get_github_login() -> str:
 	return (token.claims.get("login") or "anonymous").lower()
 
 
+def is_schema_admin(login: str) -> bool:
+	"""Return True if the given GitHub login is configured as a schema admin.
+
+	Reads GABOS_SCHEMA_ADMINS (comma-separated GitHub logins), separate from
+	the server-access allowlist (GITHUB_ALLOWED_USERS) — an admin must also be
+	in that allowlist to reach the server, but not every allowed user is an admin.
+	"""
+	raw = os.getenv("GABOS_SCHEMA_ADMINS", "")
+	admins = {u.strip().lower() for u in raw.split(",") if u.strip()}
+	return login.lower() in admins
+
+
 def build_github_auth():  # noqa: ANN201
 	"""Build OAuth auth provider if GitHub credentials are configured.
 

@@ -48,10 +48,34 @@ never hide the agent's own knowledge.
 - `agent:<name>` — global knowledge for this agent
 - `agent:<name>:folder:<key>` — folder/context-specific knowledge
 
+## Schema (ground truth)
+
+`SchemaStore` (`extractors/schema.py`) is a Tier-1 ground-truth complement to `knowledge_*`:
+objective, auto-refreshed facts pulled straight from an OMNITRACKER Export Documentation XML,
+rather than hand-maintained prose. Upload goes through `fastmcp.apps.FileUpload`
+(`utils/uploads.py`'s `SchemaFileUpload`, wired into `server.py` via `mcp.add_provider`) so the raw
+XML never enters the model's context window; `schema_import` reads it server-side, parses/validates
+it (`extractors/schema_xml.py`, pure — no MCP dependency), upserts the normalized result, and deletes
+the raw upload. No history table — each import fully replaces the row for a given key.
+
+Two tables, both upserted, both FTS5-indexed (trigram, matching the knowledge store's pattern):
+`schema_folders` (one row per folder alias, holding all of that folder's own object groups) and
+`schema_globals` (one row per Global Object, keyed by `(environment, group_type, object_name)`).
+The environment is auto-detected from the export's `Head/ServerName` + `Head/ServerPort` against
+`GABOS_SCHEMA_ENVIRONMENTS`; `schema_import` is gated by a separate admin allowlist
+(`GABOS_SCHEMA_ADMINS`, checked via `utils/auth.is_schema_admin`), distinct from the server-access
+allowlist — an admin must be in both.
+
+The bundled `extractors/schemas/ConfigurationDocumentation.xsd` is OMNITRACKER's own export schema;
+`schema_xml.parse_export` validates against it before normalizing.
+
 ## Environment Variables
 
 - `GABOS_AGENTS_DB` — agents SQLite DB path (default: `~/.local/share/gabos-mcp/agents.db`)
 - `GABOS_KNOWLEDGE_DB` — knowledge SQLite DB path (default: `~/.local/share/gabos-mcp/knowledge.db`)
+- `GABOS_SCHEMA_DB` — schema SQLite DB path (default: `~/.local/share/gabos-mcp/schema.db`)
+- `GABOS_SCHEMA_ENVIRONMENTS` — JSON mapping of environment name to `ServerName:ServerPort` (default: `{}`)
+- `GABOS_SCHEMA_ADMINS` — comma-separated GitHub logins allowed to run `schema_import` (default: none)
 - `GABOS_CHM_CACHE_DIR` — CHM cache dir (default: `~/.cache/gabos-mcp/chm`); delete subdirs to invalidate
 - `GABOS_BACKUP_DIR` — backup folder (backups disabled when unset)
 - `GABOS_BACKUP_TIME` — daily backup time 24h format (default: `02:00`)

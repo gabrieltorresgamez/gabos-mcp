@@ -41,7 +41,7 @@ def _parse_backup_time() -> time:
 	try:
 		h, m = raw.split(":")
 		return time(int(h), int(m))
-	except ValueError, AttributeError:
+	except (ValueError, AttributeError):
 		logger.exception("Invalid GABOS_BACKUP_TIME %r, defaulting to 02:00", raw)
 		return time(2, 0)
 
@@ -55,12 +55,12 @@ def _cleanup_old_backups(backup_dir: Path) -> None:
 	if retention == 0:
 		return
 	cutoff = date.today() - timedelta(days=retention)  # noqa: DTZ011
-	for pattern in ("agents_*.db", "knowledge_*.db"):
+	for pattern in ("agents_*.db", "knowledge_*.db", "schema_*.db"):
 		for f in backup_dir.glob(pattern):
 			try:
 				date_part = f.stem.split("_", 1)[1]
 				file_date = datetime.strptime(date_part, "%Y-%m-%d").date()  # noqa: DTZ007
-			except IndexError, ValueError:
+			except (IndexError, ValueError):
 				continue
 			if file_date < cutoff:
 				f.unlink()
@@ -77,6 +77,7 @@ async def run_backup(backup_dir: Path) -> bool:
 	dbs = [
 		("agents", _db_path("GABOS_AGENTS_DB", "agents.db")),
 		("knowledge", _db_path("GABOS_KNOWLEDGE_DB", "knowledge.db")),
+		("schema", _db_path("GABOS_SCHEMA_DB", "schema.db")),
 	]
 	all_ok = True
 	for name, source in dbs:
@@ -118,7 +119,11 @@ async def backup_scheduler() -> None:
 
 	# Run immediately on startup if today's backup is missing for either DB.
 	today = date.today().strftime("%Y-%m-%d")  # noqa: DTZ011
-	missing = not (backup_dir / f"agents_{today}.db").exists() or not (backup_dir / f"knowledge_{today}.db").exists()
+	missing = (
+		not (backup_dir / f"agents_{today}.db").exists()
+		or not (backup_dir / f"knowledge_{today}.db").exists()
+		or not (backup_dir / f"schema_{today}.db").exists()
+	)
 	if missing:
 		ok = await run_backup(backup_dir)
 		if ok:

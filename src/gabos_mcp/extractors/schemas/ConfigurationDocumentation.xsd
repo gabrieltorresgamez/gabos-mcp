@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- edited with XMLSpy v2007 (http://www.altova.com) by Omninet GmbH (Omninet GmbH) -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.omninet.de/schemas/configdocu/1.0" targetNamespace="http://www.omninet.de/schemas/configdocu/1.0" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:element name="ConfigurationDocumentation" type="ConfigurationDocumentationType"/>
+	<xs:complexType name="ConfigurationDocumentationType">
+		<xs:sequence>
+			<xs:element name="Head">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="ServerName"/>
+						<xs:element name="ServerPort"/>
+						<xs:element name="ServerVersion"/>
+						<xs:element name="Date"/>
+						<xs:element name="User"/>
+						<xs:element name="Language"/>
+					</xs:sequence>
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="GlobalObjects" minOccurs="0">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="Error" minOccurs="0" maxOccurs="unbounded"/>
+						<xs:element name="SchemaObjectGroup" type="SchemaObjectGroupType" minOccurs="0" maxOccurs="unbounded"/>
+					</xs:sequence>
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="SchemaObjectGroup" type="SchemaObjectGroupType" minOccurs="0"/>
+		</xs:sequence>
+		<xs:attribute name="version" type="xs:string" use="optional" default=""/>
+	</xs:complexType>
+	<xs:complexType name="SchemaObjectGroupType">
+		<xs:sequence>
+			<xs:element name="SchemaObject" type="SchemaObjectType" maxOccurs="unbounded"/>
+		</xs:sequence>
+		<xs:attribute name="Type" use="required">
+			<xs:annotation>
+				<xs:documentation>Defines the type of the contained Schema Objects.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="SchemaObjectType">
+		<xs:annotation>
+			<xs:documentation>A simple schema object.</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="Error" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Internal messages.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Name" type="MandatoryFieldType">
+				<xs:annotation>
+					<xs:documentation>The name in client language.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Alias" type="MandatoryFieldType">
+				<xs:annotation>
+					<xs:documentation>The global identifier.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Description" type="MandatoryFieldType">
+				<xs:annotation>
+					<xs:documentation>User defined description text.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="SubType" type="MandatoryFieldType">
+				<xs:annotation>
+					<xs:documentation>Possible subtype of the object.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Inherited" type="MandatoryFieldType">
+				<xs:annotation>
+					<xs:documentation>Can be "Yes" or "No". If "Yes" the object settings are inherited from a definition a folder above.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Attribute" type="AttributeType" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>All other attributes as name-value-pairs. The name is stored as node attribute "Name". The Attribute CAN contain complex items (Item/SchemaObject).</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="SchemaObjectGroup" type="SchemaObjectGroupType" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Normally the Subfolder.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="id" type="xs:string" use="optional"/>
+		<xs:attribute name="active" type="xs:string" use="optional"/>
+	</xs:complexType>
+	<xs:complexType name="AttributeType" mixed="true">
+		<xs:choice minOccurs="0">
+			<xs:element name="Item" maxOccurs="unbounded">
+				<xs:complexType>
+					<xs:sequence>
+						<xs:element name="Attribute" type="AttributeType" maxOccurs="unbounded"/>
+					</xs:sequence>
+					<xs:attribute name="RefName" type="xs:string" use="required">
+						<xs:annotation>
+							<xs:documentation>Name of the attribute which represent the Item.</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+					<xs:attribute name="StaticText" type="xs:string" use="optional">
+						<xs:annotation>
+							<xs:documentation>If set, instead of the RefName this text has to be used as describing element</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+				</xs:complexType>
+			</xs:element>
+			<xs:element name="SchemaObject" type="SchemaObjectType" maxOccurs="unbounded"/>
+		</xs:choice>
+		<xs:attribute name="Name" type="xs:string" use="required"/>
+	</xs:complexType>
+	<xs:complexType name="MandatoryFieldType">
+		<xs:simpleContent>
+			<xs:extension base="xs:string">
+				<xs:attribute name="IsNotUsed" use="optional">
+					<xs:annotation>
+						<xs:documentation>If set, the schema object does not have a alias.</xs:documentation>
+					</xs:annotation>
+					<xs:simpleType>
+						<xs:restriction base="xs:string">
+							<xs:enumeration value="Yes"/>
+						</xs:restriction>
+					</xs:simpleType>
+				</xs:attribute>
+			</xs:extension>
+		</xs:simpleContent>
+	</xs:complexType>
+</xs:schema>

@@ -19,6 +19,9 @@ Copy `docker-compose.yml-example` to `docker-compose.yml` and configure via envi
 | `GABOS_CHM_CACHE_DIR`         | `~/.cache/gabos-mcp/chm`                       | CHM extraction/index cache directory              |
 | `GABOS_KNOWLEDGE_DB`          | `~/.local/share/gabos-mcp/knowledge.db`        | Knowledge SQLite database path                    |
 | `GABOS_AGENTS_DB`             | `~/.local/share/gabos-mcp/agents.db`           | Agents SQLite database path                       |
+| `GABOS_SCHEMA_DB`             | `~/.local/share/gabos-mcp/schema.db`           | Schema SQLite database path                       |
+| `GABOS_SCHEMA_ENVIRONMENTS`   | `{}`                                            | JSON mapping of environment name to `ServerName:ServerPort` |
+| `GABOS_SCHEMA_ADMINS`         | _(none — nobody may import)_                    | Comma-separated GitHub logins allowed to run `schema_import` |
 | `GABOS_BACKUP_DIR`            | _(none — backups disabled)_                    | Absolute path to the backup folder                |
 | `GABOS_BACKUP_TIME`           | `02:00`                                        | Time of day to run the backup (24h, local time)   |
 | `GABOS_BACKUP_RETENTION_DAYS` | `30`                                           | Days to keep backups (0 = keep forever)           |
@@ -40,7 +43,7 @@ environment:
   - GABOS_BACKUP_DIR=/backups
 ```
 
-To restore, stop the server, copy the backup file over the original DB path (e.g. `cp backups/agents_2026-04-26.db ~/.local/share/gabos-mcp/agents.db`), then restart.
+To restore, stop the server, copy the backup file over the original DB path (e.g. `cp backups/agents_2026-04-26.db ~/.local/share/gabos-mcp/agents.db`), then restart. The `schema.db` database is included in the same daily backup rotation.
 
 ## Connect
 
@@ -91,6 +94,32 @@ A shared, tag-filtered knowledge store. Knowledge tagged `agent:<name>` becomes 
 | `knowledge_read`   | Fetch a single entry by `id` (includes full content).                                                                                                                                              |
 | `knowledge_write`  | Create (`mode="create"`) or update (`mode="update"`) a knowledge entry. Owner-only for update.                                                                                                     |
 | `knowledge_delete` | Delete a knowledge entry. Owner-only.                                                                                                                                                              |
+
+### Schema (OMNITRACKER Export Documentation)
+
+A ground-truth, auto-refreshed complement to `knowledge_*`: field definitions, mandatory rules,
+scripts, permissions, views, and everything else an OMNITRACKER Export Documentation XML contains.
+Each import fully replaces the prior snapshot for the folders/objects it covers — no history is
+kept, the store always reflects the last import per environment.
+
+**Producing an export**: in the OMNITRACKER Admin client, use **Export Documentation** to pick
+folders and/or Global Objects from the schema tree and export to XML.
+
+**Uploading**: drop the exported XML through the server's file-upload UI ("Schema Import"), then
+ask the assistant to call `schema_import` with the uploaded file's name. The environment is
+auto-detected from the export's `Head/ServerName` + `Head/ServerPort` against
+`GABOS_SCHEMA_ENVIRONMENTS`; pass `environment` explicitly to override it. The raw upload is
+deleted once parsing succeeds — nothing beyond the normalized snapshot is retained.
+
+| Tool                  | Description                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `schema_import`        | Parse an uploaded export XML and upsert it into the schema store. Admin-only (`GABOS_SCHEMA_ADMINS`).              |
+| `schema_read`          | Fetch the current normalized snapshot for a folder, by `environment` + `folder_alias`.                             |
+| `schema_globals_read`  | Fetch a Global Object group's snapshot, or one object in it, by `environment` + `group_type` (+ optional `object_name`). |
+| `schema_env_diff`      | Compare two environments' current snapshots for the same folder — catches drift before promotion.                  |
+| `schema_search`        | Full-text search over folders and Global Objects by name substring, optionally scoped to one `environment`.        |
+
+Read tools require authentication (any authenticated user); only `schema_import` is admin-gated.
 
 ### Docs (CHM)
 
