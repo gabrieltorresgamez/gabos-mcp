@@ -10,6 +10,7 @@ from fastmcp.server.context import Context
 from gabos_mcp.extractors.schema_xml import SchemaValidationError, parse_export
 from gabos_mcp.utils.auth import get_github_login, is_schema_admin
 from gabos_mcp.utils.environments import UnknownEnvironmentError, validate_environment
+from gabos_mcp.utils.serialization import ResponseFormat, dump_response
 from gabos_mcp.utils.stores import get_schema_store
 from gabos_mcp.utils.uploads import get_schema_file_upload
 
@@ -112,7 +113,12 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		return json.dumps(result, indent=2)
 
 	@mcp.tool
-	async def schema_read(environment: str, folder_alias: str, categories: list[str] | None = None) -> str:
+	async def schema_read(
+		environment: str,
+		folder_alias: str,
+		categories: list[str] | None = None,
+		format: ResponseFormat = "yaml",
+	) -> str:
 		"""Fetch a folder's normalized snapshot, in full or as a summary.
 
 		Without `categories`, returns a summary only: each category name (Fields,
@@ -126,22 +132,31 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    folder_alias: The folder's alias.
 		    categories: Category names to return in full (e.g. ["Fields", "Scripts"]).
 		        Omit to get the cheap summary (category -> entry count) instead.
+		    format: "yaml" (default, token-cheap) or "json" (opt-in, for callers
+		        with existing JSON parsers). Same underlying data either way.
 		"""
 		_require_authenticated()
 		await store.migrate()
 		folder = await store.get_folder_view(environment, folder_alias, categories)
 		if folder is None:
 			raise KeyError(f"No schema snapshot for environment={environment!r} folder_alias={folder_alias!r}.")
-		return json.dumps(folder, indent=2)
+		return dump_response(folder, format)
 
 	@mcp.tool
-	async def schema_globals_read(environment: str, group_type: str, object_name: str | None = None) -> str:
+	async def schema_globals_read(
+		environment: str,
+		group_type: str,
+		object_name: str | None = None,
+		format: ResponseFormat = "yaml",
+	) -> str:
 		"""Fetch the current snapshot for a Global Object group, or one object in it.
 
 		Args:
 		    environment: Environment name (e.g. "dev", "test", "prod").
 		    group_type: Global Object group type (e.g. "Fields", "Scripts").
 		    object_name: Specific object name within the group. Omit to list the whole group.
+		    format: "yaml" (default, token-cheap) or "json" (opt-in, for callers
+		        with existing JSON parsers). Same underlying data either way.
 		"""
 		_require_authenticated()
 		await store.migrate()
@@ -151,24 +166,34 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 				f"No schema snapshot for environment={environment!r} group_type={group_type!r} "
 				f"object_name={object_name!r}."
 			)
-		return json.dumps(result, indent=2)
+		return dump_response(result, format)
 
 	@mcp.tool
-	async def schema_diff_read(folder_alias: str, environment_a: str, environment_b: str) -> str:
+	async def schema_diff_read(
+		folder_alias: str, environment_a: str, environment_b: str, format: ResponseFormat = "yaml"
+	) -> str:
 		"""Compare two environments' current snapshots for the same folder.
 
 		Args:
 		    folder_alias: The folder's alias.
 		    environment_a: First environment name (the "old" side of the diff).
 		    environment_b: Second environment name (the "new" side of the diff).
+		    format: "yaml" (default, token-cheap) or "json" (opt-in, for callers
+		        with existing JSON parsers). Same underlying data either way.
 		"""
 		_require_authenticated()
 		await store.migrate()
 		result = await store.diff_env(folder_alias, environment_a, environment_b)
-		return json.dumps(result, indent=2)
+		return dump_response(result, format)
 
 	@mcp.tool
-	async def schema_search(query: str, environment: str | None = None, limit: int = 20, offset: int = 0) -> str:
+	async def schema_search(
+		query: str,
+		environment: str | None = None,
+		limit: int = 20,
+		offset: int = 0,
+		format: ResponseFormat = "yaml",
+	) -> str:
 		"""Find fields/scripts/tasks/permissions/etc. by name substring across folders and Global Objects.
 
 		Args:
@@ -176,8 +201,10 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 		    environment: Optional environment name to restrict results to.
 		    limit: Maximum results to return (default 20).
 		    offset: Entries to skip (default 0).
+		    format: "yaml" (default, token-cheap) or "json" (opt-in, for callers
+		        with existing JSON parsers). Same underlying data either way.
 		"""
 		_require_authenticated()
 		await store.migrate()
 		results = await store.search(query, environment=environment, limit=limit, offset=offset)
-		return json.dumps(results, indent=2)
+		return dump_response(results, format)

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
+import yaml
 from fastmcp.server.context import Context
 
 from gabos_mcp.extractors.schema import SchemaStore
@@ -202,7 +203,7 @@ class TestSchemaRead:
 	async def test_authenticated_can_read(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
 			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
-			result = json.loads(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
+			result = yaml.safe_load(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
 		assert result["folder_name"] == "Tickets"
 
 	async def test_anonymous_denied(self, tools):
@@ -222,26 +223,35 @@ class TestSchemaRead:
 	async def test_no_categories_returns_summary_counts_not_full_data(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
 			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
-			result = json.loads(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
+			result = yaml.safe_load(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
 		assert result["categories"] == {"Fields": 1}
 		assert "data" not in result
 
 	async def test_categories_returns_full_detail_for_requested_only(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
 			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
-			result = json.loads(
+			result = yaml.safe_load(
 				await tools["schema_read"](environment="dev", folder_alias="Tickets", categories=["Fields"])
 			)
 		assert set(result["data"]) == {"Fields"}
 		assert "Priority" in result["data"]["Fields"]
 		assert "categories" not in result
 
+	async def test_json_format_returns_same_data_as_json(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			yaml_result = yaml.safe_load(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
+			json_result = json.loads(
+				await tools["schema_read"](environment="dev", folder_alias="Tickets", format="json")
+			)
+		assert json_result == yaml_result
+
 
 @pytest.mark.asyncio
 class TestSchemaGlobalsRead:
 	async def test_empty_group_listing_returns_empty_list(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
-			result = json.loads(await tools["schema_globals_read"](environment="dev", group_type="Scripts"))
+			result = yaml.safe_load(await tools["schema_globals_read"](environment="dev", group_type="Scripts"))
 		assert result == []
 
 	async def test_missing_single_object_raises_key_error(self, tools):
@@ -251,17 +261,34 @@ class TestSchemaGlobalsRead:
 		):
 			await tools["schema_globals_read"](environment="dev", group_type="Scripts", object_name="Nope")
 
+	async def test_json_format_opt_in_returns_valid_json(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			result = json.loads(
+				await tools["schema_globals_read"](environment="dev", group_type="Scripts", format="json")
+			)
+		assert result == []
+
 
 @pytest.mark.asyncio
 class TestSchemaDiffRead:
 	async def test_compares_environments(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
 			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
-			result = json.loads(
+			result = yaml.safe_load(
 				await tools["schema_diff_read"](folder_alias="Tickets", environment_a="dev", environment_b="test")
 			)
 		assert result["found_in_a"] is True
 		assert result["found_in_b"] is False
+
+	async def test_json_format_opt_in_returns_valid_json(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			result = json.loads(
+				await tools["schema_diff_read"](
+					folder_alias="Tickets", environment_a="dev", environment_b="test", format="json"
+				)
+			)
+		assert result["found_in_a"] is True
 
 
 @pytest.mark.asyncio
@@ -269,5 +296,11 @@ class TestSchemaSearch:
 	async def test_finds_imported_field(self, tools):
 		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
 			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
-			result = json.loads(await tools["schema_search"](query="Priority"))
+			result = yaml.safe_load(await tools["schema_search"](query="Priority"))
+		assert len(result) >= 1
+
+	async def test_json_format_opt_in_returns_valid_json(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			result = json.loads(await tools["schema_search"](query="Priority", format="json"))
 		assert len(result) >= 1
