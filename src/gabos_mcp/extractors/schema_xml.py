@@ -195,12 +195,16 @@ def _normalize_object(obj_elem: etree._Element, group_type: str) -> tuple[str, d
 
 	if group_type.strip().lower() == _FIELDS_GROUP_TYPE:
 		attrs["field_type"] = attrs["sub_type"]
-		attrs["mandatory_condition"] = _attr_ci(attrs["attributes"], "mandatory", "mandatorycondition")
+		attrs["mandatory_condition"] = _flatten_rule(
+			_pop_attr_ci(attrs["attributes"], "mandatory", "mandatorycondition")
+		)
 		attrs["full_text"] = _attr_ci(attrs["attributes"], "fulltext", "fulltextindex")
 		attrs["tooltip"] = _attr_ci(attrs["attributes"], "tooltip")
+		attrs["enabled_rule"] = _flatten_rule(_pop_attr_ci(attrs["attributes"], "enabled"))
+		attrs["default_value"] = _flatten_rule(_pop_attr_ci(attrs["attributes"], "default value", "defaultvalue"))
 
 	key = attrs["alias"] or attrs["name"] or attrs.get("id", "")
-	return key, attrs
+	return key, _prune_empty(attrs)
 
 
 def _attr_ci(attributes: dict[str, Any], *candidates: str) -> str | list[dict[str, Any]] | None:
@@ -209,6 +213,55 @@ def _attr_ci(attributes: dict[str, Any], *candidates: str) -> str | list[dict[st
 		if candidate in lowered:
 			return lowered[candidate]
 	return None
+
+
+def _pop_attr_ci(attributes: dict[str, Any], *candidates: str) -> str | list[dict[str, Any]] | None:
+	"""Look up an attribute by case-insensitive name and remove it from ``attributes``.
+
+	Returns:
+	    The matching value if found, else None.
+	"""
+	lowered_keys = {k.strip().lower(): k for k in attributes}
+	for candidate in candidates:
+		if candidate in lowered_keys:
+			return attributes.pop(lowered_keys[candidate])
+	return None
+
+
+def _flatten_rule(value: str | list[dict[str, Any]] | None) -> str | list[dict[str, Any]] | None:
+	"""Collapse a single-item ``Item``-wrapped rule (Enabled/Mandatory/Default value) to its scalar Rule text.
+
+	OMNITRACKER represents an unconditional rule as one Item carrying a
+	``Rule`` attribute (e.g. ``(Always)``); only genuinely conditional
+	attributes have more than one Item, and those are left as the full list.
+
+	Returns:
+	    The scalar Rule text for the single-item unconditional case, otherwise ``value`` unchanged.
+	"""
+	if isinstance(value, list) and len(value) == 1:
+		item = value[0]
+		rule = item.get("attributes", {}).get("Rule") if isinstance(item, dict) else None
+		if isinstance(rule, str):
+			return rule
+	return value
+
+
+def _prune_empty(attrs: dict[str, Any]) -> dict[str, Any]:
+	"""Recursively drop empty-string/None values from a normalized attrs dict.
+
+	Returns:
+	    The dict with empty scalar leaves omitted (containers like ``{}``/``[]`` are kept as-is).
+	"""
+	pruned = {k: _prune_value(v) for k, v in attrs.items()}
+	return {k: v for k, v in pruned.items() if not (v is None or (isinstance(v, str) and not v))}
+
+
+def _prune_value(value: dict[str, Any] | list[Any] | str | None) -> dict[str, Any] | list[Any] | str | None:
+	if isinstance(value, dict):
+		return _prune_empty(value)
+	if isinstance(value, list):
+		return [_prune_value(v) for v in value]
+	return value
 
 
 def _normalize_group(group_elem: etree._Element) -> tuple[str, dict[str, dict[str, Any]]]:

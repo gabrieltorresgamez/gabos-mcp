@@ -219,6 +219,23 @@ class TestSchemaRead:
 		):
 			await tools["schema_read"](environment="dev", folder_alias="Nope")
 
+	async def test_no_categories_returns_summary_counts_not_full_data(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			result = json.loads(await tools["schema_read"](environment="dev", folder_alias="Tickets"))
+		assert result["categories"] == {"Fields": 1}
+		assert "data" not in result
+
+	async def test_categories_returns_full_detail_for_requested_only(self, tools):
+		with patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"):
+			await tools["schema_write"](file_name="export.xml", environment="dev", ctx=FakeCtx())
+			result = json.loads(
+				await tools["schema_read"](environment="dev", folder_alias="Tickets", categories=["Fields"])
+			)
+		assert set(result["data"]) == {"Fields"}
+		assert "Priority" in result["data"]["Fields"]
+		assert "categories" not in result
+
 
 @pytest.mark.asyncio
 class TestSchemaGlobalsRead:

@@ -191,6 +191,104 @@ class TestParseExport:
 		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
 		assert tickets.name == "Tickets"
 
+	def test_field_omits_empty_and_null_keys(self):
+		root = b"""<?xml version="1.0"?>
+        <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
+          <Head>
+            <ServerName>x</ServerName><ServerPort>1</ServerPort><ServerVersion>1</ServerVersion>
+            <Date/><User/><Language/>
+          </Head>
+          <SchemaObjectGroup Type="Folder">
+            <SchemaObject id="1">
+              <Name>Tickets</Name><Alias>Tickets</Alias><Description/>
+              <SubType IsNotUsed="Yes"></SubType><Inherited>No</Inherited>
+              <SchemaObjectGroup Type="Fields">
+                <SchemaObject id="100">
+                  <Name>Owner</Name><Alias>Owner</Alias><Description/>
+                  <SubType>String</SubType><Inherited>No</Inherited>
+                </SchemaObject>
+              </SchemaObjectGroup>
+            </SchemaObject>
+          </SchemaObjectGroup>
+        </ConfigurationDocumentation>"""
+		parsed = parse_export(root)
+		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
+		owner = tickets.data["Fields"]["Owner"]
+		assert "full_text" not in owner
+		assert "tooltip" not in owner
+		assert "mandatory_condition" not in owner
+		assert "enabled_rule" not in owner
+		assert "default_value" not in owner
+		assert "description" not in owner
+
+	def test_unconditional_rule_attribute_flattens_to_scalar(self):
+		root = b"""<?xml version="1.0"?>
+        <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
+          <Head>
+            <ServerName>x</ServerName><ServerPort>1</ServerPort><ServerVersion>1</ServerVersion>
+            <Date/><User/><Language/>
+          </Head>
+          <SchemaObjectGroup Type="Folder">
+            <SchemaObject id="1">
+              <Name>Tickets</Name><Alias>Tickets</Alias><Description/>
+              <SubType IsNotUsed="Yes"></SubType><Inherited>No</Inherited>
+              <SchemaObjectGroup Type="Fields">
+                <SchemaObject id="100">
+                  <Name>Priority</Name><Alias>Priority</Alias><Description/>
+                  <SubType>Integer</SubType><Inherited>No</Inherited>
+                  <Attribute Name="Enabled">
+                    <Item RefName="Name">
+                      <Attribute Name="Name">Rule: (Always)</Attribute>
+                      <Attribute Name="Enabled">true</Attribute>
+                      <Attribute Name="Determined by">Rule</Attribute>
+                      <Attribute Name="Rule">(Always)</Attribute>
+                    </Item>
+                  </Attribute>
+                </SchemaObject>
+              </SchemaObjectGroup>
+            </SchemaObject>
+          </SchemaObjectGroup>
+        </ConfigurationDocumentation>"""
+		parsed = parse_export(root)
+		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
+		priority = tickets.data["Fields"]["Priority"]
+		assert priority["enabled_rule"] == "(Always)"
+		assert "Enabled" not in priority["attributes"]
+
+	def test_conditional_rule_attribute_keeps_full_list(self):
+		root = b"""<?xml version="1.0"?>
+        <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
+          <Head>
+            <ServerName>x</ServerName><ServerPort>1</ServerPort><ServerVersion>1</ServerVersion>
+            <Date/><User/><Language/>
+          </Head>
+          <SchemaObjectGroup Type="Folder">
+            <SchemaObject id="1">
+              <Name>Tickets</Name><Alias>Tickets</Alias><Description/>
+              <SubType IsNotUsed="Yes"></SubType><Inherited>No</Inherited>
+              <SchemaObjectGroup Type="Fields">
+                <SchemaObject id="100">
+                  <Name>Priority</Name><Alias>Priority</Alias><Description/>
+                  <SubType>Integer</SubType><Inherited>No</Inherited>
+                  <Attribute Name="Enabled">
+                    <Item RefName="A">
+                      <Attribute Name="Rule">Status = 'Open'</Attribute>
+                    </Item>
+                    <Item RefName="B">
+                      <Attribute Name="Rule">Status = 'Closed'</Attribute>
+                    </Item>
+                  </Attribute>
+                </SchemaObject>
+              </SchemaObjectGroup>
+            </SchemaObject>
+          </SchemaObjectGroup>
+        </ConfigurationDocumentation>"""
+		parsed = parse_export(root)
+		tickets = next(f for f in parsed.folders if f.alias == "Tickets")
+		priority = tickets.data["Fields"]["Priority"]
+		assert isinstance(priority["enabled_rule"], list)
+		assert len(priority["enabled_rule"]) == 2
+
 	def test_duplicate_sibling_group_type_merges_instead_of_overwriting(self):
 		root = b"""<?xml version="1.0"?>
         <ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0">
