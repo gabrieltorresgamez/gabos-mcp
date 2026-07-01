@@ -46,6 +46,35 @@ _SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
 </ConfigurationDocumentation>
 """
 
+_TWO_FOLDER_SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
+<ConfigurationDocumentation xmlns="http://www.omninet.de/schemas/configdocu/1.0" version="1.0">
+  <Head>
+    <ServerName>omni-dev01</ServerName>
+    <ServerPort>4000</ServerPort>
+    <ServerVersion>10.6.2</ServerVersion>
+    <Date>2026-06-01</Date>
+    <User>admin</User>
+    <Language>EN</Language>
+  </Head>
+  <SchemaObjectGroup Type="Folder">
+    <SchemaObject id="10" active="Yes">
+      <Name>Tickets</Name>
+      <Alias>Tickets</Alias>
+      <Description>Ticket folder</Description>
+      <SubType IsNotUsed="Yes"></SubType>
+      <Inherited>No</Inherited>
+    </SchemaObject>
+    <SchemaObject id="20" active="Yes">
+      <Name>Assets</Name>
+      <Alias>Assets</Alias>
+      <Description>Asset folder</Description>
+      <SubType IsNotUsed="Yes"></SubType>
+      <Inherited>No</Inherited>
+    </SchemaObject>
+  </SchemaObjectGroup>
+</ConfigurationDocumentation>
+"""
+
 
 class FakeCtx:
 	session_id = "sess1"
@@ -134,6 +163,38 @@ class TestSchemaWrite:
 			result = json.loads(await tools["schema_write"](file_name="bad.xml", environment="dev", ctx=FakeCtx()))
 		assert "error" in result
 		assert all(f["name"] != "bad.xml" for f in file_upload.on_list(FakeCtx()))
+
+	async def test_rolls_back_whole_import_when_one_upsert_fails(self, tools, store, file_upload):
+		file_upload.on_store(
+			[
+				{
+					"name": "two-folders.xml",
+					"size": len(_TWO_FOLDER_SAMPLE),
+					"type": "text/xml",
+					"data": base64.b64encode(_TWO_FOLDER_SAMPLE).decode(),
+				}
+			],
+			cast("Context", FakeCtx()),
+		)
+		real_upsert_folder = store.upsert_folder
+		call_count = 0
+
+		async def flaky_upsert_folder(*args, **kwargs):
+			nonlocal call_count
+			call_count += 1
+			await real_upsert_folder(*args, **kwargs)
+			if call_count == 2:
+				raise RuntimeError("boom")
+
+		with (
+			patch("gabos_mcp.tools.schema.get_github_login", return_value="alice"),
+			patch.object(store, "upsert_folder", side_effect=flaky_upsert_folder),
+			pytest.raises(RuntimeError, match="boom"),
+		):
+			await tools["schema_write"](file_name="two-folders.xml", environment="dev", ctx=FakeCtx())
+
+		assert await store.get_folder("dev", "Tickets") is None
+		assert await store.get_folder("dev", "Assets") is None
 
 
 @pytest.mark.asyncio

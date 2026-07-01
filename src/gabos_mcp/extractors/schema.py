@@ -155,6 +155,11 @@ class SchemaStore(BaseStore):
 		conn = await self._connect()
 		await conn.commit()
 
+	async def rollback(self) -> None:
+		"""Discard any pending writes made with ``commit=False``."""
+		conn = await self._connect()
+		await conn.rollback()
+
 	async def get_folder(self, environment: str, folder_alias: str) -> dict[str, Any] | None:
 		"""Return the current snapshot for a folder, or None if not found."""
 		conn = await self._connect()

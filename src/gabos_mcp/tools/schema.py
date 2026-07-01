@@ -74,25 +74,29 @@ def register(mcp: FastMCP) -> None:  # noqa: C901
 
 		previous_version = await store.get_last_seen_version(environment)
 
-		for folder in parsed.folders:
-			await store.upsert_folder(
-				environment=environment,
-				folder_alias=folder.alias,
-				folder_name=folder.name,
-				server_version=parsed.head.server_version,
-				data=folder.data,
-				commit=False,
-			)
+		try:
+			for folder in parsed.folders:
+				await store.upsert_folder(
+					environment=environment,
+					folder_alias=folder.alias,
+					folder_name=folder.name,
+					server_version=parsed.head.server_version,
+					data=folder.data,
+					commit=False,
+				)
 
-		for obj in parsed.globals:
-			await store.upsert_global(
-				environment=environment,
-				group_type=obj.group_type,
-				object_name=obj.object_name,
-				server_version=parsed.head.server_version,
-				data=obj.data,
-				commit=False,
-			)
+			for obj in parsed.globals:
+				await store.upsert_global(
+					environment=environment,
+					group_type=obj.group_type,
+					object_name=obj.object_name,
+					server_version=parsed.head.server_version,
+					data=obj.data,
+					commit=False,
+				)
+		except Exception:
+			await store.rollback()
+			raise
 
 		await store.commit()
 
